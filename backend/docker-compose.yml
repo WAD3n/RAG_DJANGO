@@ -1,0 +1,71 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+    environment:
+      DEVICE: auto
+      USE_LOCAL_LLM: "true"
+      LOCAL_LLM_MODEL: Qwen/Qwen2.5-1.5B-Instruct
+      PG_DSN: postgresql://ragdocs:ragdocs@postgres:5432/ragdocs
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: ragdocs
+      KAFKA_BOOTSTRAP_SERVERS: '["kafka:9092"]'
+      KAFKA_TOPIC_FILE_UPLOADED: rag.file.uploaded
+      KAFKA_CONSUMER_GROUP: rag-pipeline
+    volumes:
+      - model_cache:/root/.cache/huggingface
+      - sqlite_data:/app/backend
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks: [ragdla]
+    restart: unless-stopped
+
+  consumer:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+    command: python manage.py run_consumer
+    environment:
+      DEVICE: auto
+      USE_LOCAL_LLM: "true"
+      LOCAL_LLM_MODEL: Qwen/Qwen2.5-1.5B-Instruct
+      PG_DSN: postgresql://ragdocs:ragdocs@postgres:5432/ragdocs
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET: ragdocs
+      KAFKA_BOOTSTRAP_SERVERS: '["kafka:9092"]'
+      KAFKA_TOPIC_FILE_UPLOADED: rag.file.uploaded
+      KAFKA_CONSUMER_GROUP: rag-pipeline
+    volumes:
+      - model_cache:/root/.cache/huggingface
+      - sqlite_data:/app/backend
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    networks: [ragdla]
+    restart: unless-stopped
+
+volumes:
+  model_cache:
+  sqlite_data:
+
+networks:
+  ragdla:
+    external: true
+    name: ragdla

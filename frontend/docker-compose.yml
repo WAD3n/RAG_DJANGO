@@ -1,0 +1,19 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runner
+      args:
+        BACKEND_URL: http://api:8000
+    ports:
+      - "3000:3000"
+    environment:
+      BACKEND_URL: http://api:8000
+    networks: [ragdla]
+    restart: unless-stopped
+
+networks:
+  ragdla:
+    external: true
+    name: ragdla
