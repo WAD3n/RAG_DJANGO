@@ -27,7 +27,6 @@ const TYPE_LABELS: Record<string, string> = {
 export default function Upload({ onComplete }: UploadProps) {
   const [files, setFiles] = React.useState<UploadedFile[]>([]);
   const [dragging, setDragging] = React.useState(false);
-  const [projectName, setProjectName] = React.useState('New Project');
   const inputRef = useRef<HTMLInputElement>(null);
 
   const updateFile = useCallback((id: string, patch: Partial<UploadedFile>) => {
@@ -98,23 +97,8 @@ export default function Upload({ onComplete }: UploadProps) {
     <div className="upload-screen">
       <div className="us-inner">
         <div className="us-head">
-          <div>
-            <input
-              className="us-projname"
-              value={projectName}
-              onChange={e => setProjectName(e.target.value)}
-              spellCheck={false}
-            />
-            <div className="muted" style={{ fontSize: 13, marginTop: 4 }}>
-              Drop in the materials you want to query. Files stay private.
-            </div>
-          </div>
-          <div className="stepper">
-            <div className="step done"><span className="num">1</span> Create</div>
-            <div className="bar" />
-            <div className="step active"><span className="num">2</span> Upload</div>
-            <div className="bar" />
-            <div className={`step ${allReady ? 'active' : ''}`}><span className="num">3</span> Chat</div>
+          <div className="muted" style={{ fontSize: 13 }}>
+            Drop in the materials you want to query. Files stay private.
           </div>
         </div>
 
@@ -185,19 +169,6 @@ export default function Upload({ onComplete }: UploadProps) {
           </div>
         )}
 
-        {files.length === 0 && (
-          <div className="connectors">
-            <div className="conn-label muted">or pull from</div>
-            <div className="conn-row">
-              {['Google Drive', 'Notion', 'Dropbox', 'Confluence', 'Web URL'].map(s => (
-                <button key={s} className="conn-btn" title="Coming soon">
-                  <span className="conn-mark" data-svc={s} />
-                  {s}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       <style jsx>{`
@@ -207,14 +178,6 @@ export default function Upload({ onComplete }: UploadProps) {
           display: flex; justify-content: space-between; align-items: flex-start;
           gap: 16px; flex-wrap: wrap;
         }
-        .us-projname {
-          font-size: 26px; font-weight: 600; letter-spacing: -0.015em;
-          color: var(--fg); background: transparent; border: 0; outline: 0;
-          padding: 2px 0; width: 100%; max-width: 460px;
-          border-bottom: 1px dashed transparent;
-        }
-        .us-projname:hover, .us-projname:focus { border-bottom-color: var(--border-strong); }
-
         .dropzone {
           position: relative;
           border: 1.5px dashed var(--border-strong);
@@ -255,27 +218,6 @@ export default function Upload({ onComplete }: UploadProps) {
         .dz-title { font-size: 15px; font-weight: 500; }
         .dz-sub { font-size: 13px; margin-top: 4px; }
         .dz-shortcut { position: absolute; right: 14px; top: 14px; display: flex; gap: 3px; }
-
-        .connectors { padding: 4px 4px 0; }
-        .conn-label {
-          font-size: 11.5px; text-transform: uppercase; letter-spacing: 0.08em;
-          margin-bottom: 10px;
-        }
-        .conn-row { display: flex; gap: 8px; flex-wrap: wrap; }
-        .conn-btn {
-          appearance: none; border: 1px solid var(--border);
-          background: var(--bg-elev); color: var(--fg);
-          padding: 0 12px 0 10px; height: 32px;
-          border-radius: 8px; cursor: default;
-          font-size: 13px; display: inline-flex; align-items: center; gap: 8px;
-          font-family: inherit;
-        }
-        .conn-btn:hover { background: var(--bg-soft); }
-        .conn-mark {
-          width: 14px; height: 14px; border-radius: 3px;
-          background: var(--bg-soft); border: 1px solid var(--border);
-          display: inline-block;
-        }
 
         .files-block {
           background: var(--bg-elev); border: 1px solid var(--border);

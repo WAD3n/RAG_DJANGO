@@ -41,14 +41,13 @@ export interface Document {
 
 export interface StorageObject {
   key: string;
-  size: number;
-  last_modified: string;
+  download_url: string;
 }
 
 export interface StatsResponse {
   total_chunks: number;
   total_documents: number;
-  embedding_model: string;
+  sources: string[];
 }
 
 export interface QueryHit {
@@ -56,9 +55,40 @@ export interface QueryHit {
   source: string;
   heading: string;
   score: number;
+  page_no?: number;
 }
 
 export interface QueryResponse {
   answer: string;
   context: QueryHit[];
+}
+
+export interface AuthResponse {
+  token: string;
+  username: string;
+}
+
+export interface DocumentInfo {
+  source: string;
+  name: string;
+  chunks: number;
+  original_key?: string;
+  original_ext?: string;
+}
+
+export interface ConvRecord {
+  id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count: number;
+}
+
+export interface MessageRecord {
+  id: number;
+  role: 'user' | 'assistant';
+  content: string;
+  citations: Citation[];
+  duration_ms?: number | null;
+  created_at: string;
 }

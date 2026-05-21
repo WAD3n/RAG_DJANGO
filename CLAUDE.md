@@ -49,7 +49,7 @@ docker compose up -d
 
 # Backend (activate venv first, run from backend/)
 cd backend
-python manage.py runserver 8000
+python manage.py runserver --noreload 8000
 
 # Kafka consumer (separate terminal, inside backend/)
 python manage.py run_consumer

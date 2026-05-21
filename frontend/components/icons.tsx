@@ -45,3 +45,5 @@ export const Quote       = icon(<><path d="M3 9V7c0-1.5 1-2.5 2.5-3M9 9V7c0-1.5 
 export const Layers      = icon(<><path d="m8 2 6 3-6 3-6-3 6-3Z"/><path d="m2 8 6 3 6-3M2 11l6 3 6-3"/></>);
 export const Filter      = icon(<><path d="M2.5 3.5h11l-4 5v4l-3 1V8.5l-4-5Z"/></>);
 export const Logo        = icon(<><path d="M3 12V4l5 4 5-4v8"/><circle cx="8" cy="8" r="1.2" fill="currentColor" stroke="none"/></>);
+export const LogOut      = icon(<><path d="M6 3H3.5A1 1 0 0 0 2.5 4v8a1 1 0 0 0 1 1H6M10.5 5.5 13.5 8l-3 2.5M7 8h6.5"/></>);
+export const Pencil      = icon(<><path d="M10.5 3.5 12.5 5.5 5.5 12.5H3.5v-2L10.5 3.5Z"/><path d="M9.5 4.5l2 2"/></>);

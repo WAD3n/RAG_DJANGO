@@ -1,6 +1,8 @@
 'use client';
 
+import React from 'react';
 import * as Icon from './icons';
+import { getToken } from '../lib/api';
 import type { ChatMessage, Citation, Document } from '../lib/types';
 
 interface SourcesPanelProps {
@@ -11,24 +13,32 @@ interface SourcesPanelProps {
   activeCitation: Citation | undefined;
 }
 
+function openInPdf(objectName: string, passage: string, pageNo?: number) {
+  const token = getToken();
+  const params = new URLSearchParams({ key: objectName });
+  if (token) params.set('_token', token);
+  const fragment = pageNo && pageNo > 1
+    ? `#page=${pageNo}`
+    : `#search=${encodeURIComponent(passage.replace(/\s+/g, ' ').trim().slice(0, 120))}`;
+  window.open(`/api/pdf/view?${params}${fragment}`, '_blank');
+}
+
 export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, activeCitation }: SourcesPanelProps) {
   const citations = msg?.citations || [];
   const doc = activeCitation && docs.find(d => d.id === activeCitation.doc);
-
   return (
     <aside className="sources-panel">
       <div className="sp-tabs">
         <button className="sp-tab active">
           Cited <span className="sp-tab-count mono">{citations.length}</span>
         </button>
-        <button className="sp-tab">All retrieved</button>
         <div style={{ flex: 1 }} />
         <button className="icon-btn" title="Filter"><Icon.Filter size={13} /></button>
       </div>
 
       <div className="sp-list scroll">
         {citations.length === 0 && (
-          <div className="sp-empty muted">
+          <div className="sp-empty">
             <Icon.Quote size={20} />
             <div>Source passages will appear here when RAGFLOW answers your question.</div>
           </div>
@@ -36,6 +46,8 @@ export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, act
         {citations.map(c => {
           const d = docs.find(x => x.id === c.doc);
           const active = activeCitation?.id === c.id;
+          const hasPdf = !!d?.objectName;
+
           return (
             <button
               key={c.id}
@@ -48,17 +60,22 @@ export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, act
                   <span className="sp-dot" style={{ background: d?.color }} />
                   <span className="sp-doc-name">{d?.name || `Source ${c.id}`}</span>
                 </span>
-                {c.page && <span className="mono faint" style={{ fontSize: 10.5 }}>p.{c.page}</span>}
+                {c.score && (
+                  <span className="sp-score mono">{(c.score * 100).toFixed(0)}%</span>
+                )}
               </div>
               <div className="sp-card-passage">
                 &ldquo;{highlightPassage(c.passage)}&rdquo;
               </div>
-              {c.score && (
-                <div className="sp-card-foot">
-                  <span className="mono faint" style={{ fontSize: 10 }}>
-                    relevance {c.score.toFixed(2)}
-                  </span>
-                  <span className="muted">Open in PDF →</span>
+              {hasPdf && (
+                <div className="sp-card-foot" onClick={e => e.stopPropagation()}>
+                  <button
+                    className="sp-open-btn"
+                    onClick={() => openInPdf(d!.objectName!, c.passage, c.page)}
+                    title="Open PDF at this passage (Chrome/Edge)"
+                  >
+                    <Icon.Export size={11} /> Open in PDF
+                  </button>
                 </div>
               )}
             </button>
@@ -69,9 +86,17 @@ export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, act
           <div className="sp-preview fade-up">
             <div className="sp-preview-head">
               <span className="mono" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Icon.File size={11} /> {doc.name}{activeCitation.page ? ` · page ${activeCitation.page}` : ''}
+                <Icon.File size={11} /> {doc.name}
               </span>
-              <button className="icon-btn"><Icon.Close size={12} /></button>
+              {doc.objectName && (
+                <button
+                  className="sp-preview-open"
+                  onClick={() => openInPdf(doc.objectName!, activeCitation.passage, activeCitation.page)}
+                  title="Open PDF"
+                >
+                  <Icon.Export size={11} /> Open PDF
+                </button>
+              )}
             </div>
             <div className="sp-preview-page">
               <div className="pdf-line h" />
@@ -87,9 +112,6 @@ export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, act
               <div className="pdf-line w80" />
               <div className="pdf-line w90" />
               <div className="pdf-line w60" />
-              {activeCitation.page && (
-                <div className="pdf-pagenum mono">— {activeCitation.page} —</div>
-              )}
             </div>
           </div>
         )}
@@ -132,7 +154,7 @@ export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, act
           background: var(--bg-elev); border: 1px solid var(--border);
           border-radius: 10px; padding: 10px 12px;
           color: var(--fg); font: inherit;
-          display: flex; flex-direction: column; gap: 6px;
+          display: flex; flex-direction: column; gap: 7px;
           transition: border-color 120ms, background 120ms; width: 100%;
         }
         .sp-card:hover { border-color: var(--border-strong); background: var(--bg-soft); }
@@ -142,30 +164,54 @@ export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, act
           box-shadow: 0 0 0 1px var(--accent-soft);
         }
         .sp-card-head { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--fg-muted); }
-        .sp-card-num { color: var(--accent); font-weight: 600; flex: none; }
+        .sp-card-num { color: var(--accent); font-weight: 700; flex: none; font-size: 11.5px; }
         .sp-card-doc { display: inline-flex; align-items: center; gap: 5px; flex: 1; min-width: 0; }
         .sp-doc-name {
           white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-          font-size: 11.5px; color: var(--fg);
+          font-size: 12px; font-weight: 500; color: var(--fg);
         }
         .sp-dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+        .sp-score {
+          font-size: 10px; color: var(--fg-faint);
+          background: var(--bg-soft); border: 1px solid var(--border);
+          padding: 1px 5px; border-radius: 4px; flex: none;
+        }
         .sp-card-passage {
-          font-size: 13px; line-height: 1.5; color: var(--fg);
-          font-family: 'Inter Tight', Georgia, serif; font-style: italic;
+          font-size: 12.5px; line-height: 1.55; color: var(--fg);
+          font-style: italic; letter-spacing: 0.01em;
         }
         .sp-card-passage :global(mark) {
           background: var(--highlight); color: inherit; padding: 0 2px; border-radius: 2px; font-style: normal;
         }
-        .sp-card-foot {
-          display: flex; justify-content: space-between; align-items: center;
-          font-size: 11px; color: var(--fg-faint);
+        .sp-card-foot { display: flex; align-items: center; padding-top: 2px; }
+        .sp-open-btn {
+          appearance: none; border: 1px solid var(--border-strong);
+          background: var(--bg-soft); color: var(--fg-muted);
+          padding: 0 9px; height: 24px; border-radius: 5px;
+          font: inherit; font-size: 11.5px; font-weight: 500;
+          display: inline-flex; align-items: center; gap: 5px;
+          cursor: default; transition: all 100ms;
         }
+        .sp-open-btn:hover:not(:disabled) {
+          background: var(--accent); color: var(--accent-fg);
+          border-color: var(--accent);
+        }
+        .sp-open-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+        .sp-open-btn.loading { gap: 6px; }
 
         .sp-preview { margin-top: 4px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
         .sp-preview-head {
           display: flex; justify-content: space-between; align-items: center;
           padding: 8px 10px; border-bottom: 1px solid var(--border); color: var(--fg-muted);
         }
+        .sp-preview-open {
+          appearance: none; border: 1px solid var(--border-strong);
+          background: var(--bg-soft); color: var(--fg-muted);
+          padding: 0 8px; height: 22px; border-radius: 5px;
+          font: inherit; font-size: 11px; font-weight: 500;
+          display: inline-flex; align-items: center; gap: 4px; cursor: default;
+        }
+        .sp-preview-open:hover { background: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
         .sp-preview-page {
           background: #fff; padding: 18px 16px;
           display: flex; flex-direction: column; gap: 6px; position: relative;
@@ -186,14 +232,10 @@ export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, act
           display: flex; flex-direction: column; gap: 6px;
         }
         .pdf-block-highlight::before {
-          content: ""; position: absolute; left: -8px; top: 0; bottom: 0; width: 2px;
-          background: var(--accent);
+          content: ""; position: absolute; left: -8px; top: 0; bottom: 0; width: 3px;
+          background: var(--accent); border-radius: 0 2px 2px 0;
         }
-        .pdf-line.on { background: color-mix(in oklab, var(--accent) 60%, #000); }
-        .pdf-pagenum {
-          position: absolute; left: 0; right: 0; bottom: 6px;
-          text-align: center; font-size: 9.5px; color: var(--fg-faint);
-        }
+        .pdf-line.on { background: color-mix(in oklab, var(--accent) 55%, transparent); }
       `}</style>
     </aside>
   );

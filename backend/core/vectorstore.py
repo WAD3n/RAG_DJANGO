@@ -72,9 +72,13 @@ class VectorStore:
                     source       TEXT NOT NULL,
                     heading      TEXT NOT NULL,
                     chunk_index  INTEGER NOT NULL,
+                    page_no      INTEGER NOT NULL DEFAULT 1,
                     content      TEXT NOT NULL,
                     embedding    vector({self._dim})
                 )
+            """)
+            cur.execute("""
+                ALTER TABLE chunks ADD COLUMN IF NOT EXISTS page_no INTEGER NOT NULL DEFAULT 1
             """)
             cur.execute("""
                 CREATE INDEX IF NOT EXISTS chunks_hnsw_idx
@@ -113,12 +117,13 @@ class VectorStore:
             for chunk, emb in zip(chunks, embeddings, strict=True):
                 cur.execute(
                     """
-                    INSERT INTO chunks (id, source, heading, chunk_index, content, embedding)
-                    VALUES (%s, %s, %s, %s, %s, %s)
+                    INSERT INTO chunks (id, source, heading, chunk_index, page_no, content, embedding)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
                         content     = EXCLUDED.content,
                         heading     = EXCLUDED.heading,
                         chunk_index = EXCLUDED.chunk_index,
+                        page_no     = EXCLUDED.page_no,
                         embedding   = EXCLUDED.embedding
                     """,
                     (
@@ -126,6 +131,7 @@ class VectorStore:
                         md_path.name,
                         chunk.heading,
                         chunk.chunk_index,
+                        chunk.page_no,
                         chunk.text,
                         emb,
                     ),
@@ -145,7 +151,7 @@ class VectorStore:
             with self._conn.cursor() as cur:
                 cur.execute(
                     """
-                    SELECT content, source, heading,
+                    SELECT content, source, heading, page_no,
                            1 - (embedding <=> %s) AS score
                     FROM chunks
                     ORDER BY embedding <=> %s
@@ -163,21 +169,35 @@ class VectorStore:
                 "text": row[0],
                 "source": row[1],
                 "heading": row[2],
-                "score": round(float(row[3]), 4),
+                "page_no": row[3],
+                "score": round(float(row[4]), 4),
             }
             for row in rows
         ]
         logger.debug("Search returned %d results", len(results))
         return results
 
+    def documents(self) -> list[dict]:
+        with self._conn.cursor() as cur:
+            cur.execute("""
+                SELECT source, COUNT(*) AS chunk_count
+                FROM chunks
+                GROUP BY source
+                ORDER BY source
+            """)
+            rows = cur.fetchall()
+        return [{"source": row[0], "chunks": row[1]} for row in rows]
+
     def stats(self) -> dict:
         logger.debug("Fetching vector store stats")
         with self._conn.cursor() as cur:
             cur.execute("SELECT COUNT(*), ARRAY_AGG(DISTINCT source) FROM chunks")
             count, sources = cur.fetchone()
+        srcs = sorted(sources or [])
         return {
             "total_chunks": count or 0,
-            "sources": sorted(sources or []),
+            "total_documents": len(srcs),
+            "sources": srcs,
         }
 
     def close(self) -> None:

@@ -28,11 +28,11 @@
   --bg-elev:   #131316;
   --bg-soft:   #17171a;
   --bg-softer: #1c1c20;
-  --fg:        #f6f5f1;
-  --fg-muted:  #9a9890;
-  --fg-faint:  #6b6862;
-  --border:    #232328;
-  --border-strong: #2d2d33;
+  --fg:        #f0ede8;
+  --fg-muted:  #b8b4ac;
+  --fg-faint:  #857f77;
+  --border:    #262629;
+  --border-strong: #363640;
   --accent-soft: color-mix(in oklab, var(--accent) 20%, transparent);
   --highlight: color-mix(in oklab, var(--accent) 28%, #2a2418);
   --shadow-card: 0 1px 0 rgba(0,0,0,0.4), 0 1px 2px rgba(0,0,0,0.3);

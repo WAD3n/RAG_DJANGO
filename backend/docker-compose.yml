@@ -20,7 +20,6 @@ services:
       KAFKA_CONSUMER_GROUP: rag-pipeline
     volumes:
       - model_cache:/root/.cache/huggingface
-      - sqlite_data:/app/backend
     deploy:
       resources:
         reservations:
@@ -50,7 +49,6 @@ services:
       KAFKA_CONSUMER_GROUP: rag-pipeline
     volumes:
       - model_cache:/root/.cache/huggingface
-      - sqlite_data:/app/backend
     deploy:
       resources:
         reservations:
@@ -63,7 +61,6 @@ services:
 
 volumes:
   model_cache:
-  sqlite_data:
 
 networks:
   ragdla:

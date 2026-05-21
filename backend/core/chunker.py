@@ -21,7 +21,8 @@ logger = logging.getLogger(__name__)
 class Chunk:
     text: str
     heading: str       # nearest heading above the chunk
-    chunk_index: int   # position within the document
+    chunk_index: int
+    page_no: int = 1   # position within the document
 
 
 def _clean(text: str) -> str:
@@ -60,32 +61,38 @@ def chunk_markdown(
     text = _clean(text)
     lines = text.splitlines()
 
-    # Phase 1: split into sections at every heading
-    sections: list[tuple[str, list[str]]] = []
+    # Phase 1: split into sections at every heading; track --- page breaks from docling
+    sections: list[tuple[str, list[str], int]] = []
     current_heading = ""
     current_lines: list[str] = []
+    current_page = 1
+    section_start_page = 1
 
     for line in lines:
+        if line.strip() == "---" or "\f" in line:
+            current_page += 1
+            continue
         if _heading_level(line) in (2, 3) and len(line) < 120:
             if current_lines:
-                sections.append((current_heading, current_lines))
+                sections.append((current_heading, current_lines, section_start_page))
             current_heading = re.sub(r"^#{1,6}\s+", "", line).strip()
             current_lines = []
+            section_start_page = current_page
         elif not _is_toc_line(line):
             current_lines.append(line)
 
     if current_lines:
-        sections.append((current_heading, current_lines))
+        sections.append((current_heading, current_lines, section_start_page))
 
     # Phase 2: split large sections by paragraphs
-    raw_chunks: list[tuple[str, str]] = []
+    raw_chunks: list[tuple[str, str, int]] = []
 
-    for heading, sec_lines in sections:
+    for heading, sec_lines, page_no in sections:
         sec_text = "\n".join(sec_lines).strip()
         if not sec_text:
             continue
         if _word_count(sec_text) <= max_words:
-            raw_chunks.append((heading, sec_text))
+            raw_chunks.append((heading, sec_text, page_no))
             continue
         paragraphs = _split_paragraphs(sec_text)
         buffer: list[str] = []
@@ -93,31 +100,31 @@ def chunk_markdown(
         for para in paragraphs:
             pw = _word_count(para)
             if buf_words + pw > max_words and buffer:
-                raw_chunks.append((heading, "\n\n".join(buffer)))
+                raw_chunks.append((heading, "\n\n".join(buffer), page_no))
                 buffer = []
                 buf_words = 0
             buffer.append(para)
             buf_words += pw
         if buffer:
-            raw_chunks.append((heading, "\n\n".join(buffer)))
+            raw_chunks.append((heading, "\n\n".join(buffer), page_no))
 
     # Phase 3: merge orphans
-    merged: list[tuple[str, str]] = []
-    for heading, text_block in raw_chunks:
+    merged: list[tuple[str, str, int]] = []
+    for heading, text_block, page_no in raw_chunks:
         if merged and _word_count(text_block) < min_words:
-            prev_h, prev_t = merged[-1]
-            merged[-1] = (prev_h, prev_t + "\n\n" + text_block)
+            prev_h, prev_t, prev_p = merged[-1]
+            merged[-1] = (prev_h, prev_t + "\n\n" + text_block, prev_p)
         else:
-            merged.append((heading, text_block))
+            merged.append((heading, text_block, page_no))
 
     # Phase 4: sliding overlap
     chunks: list[Chunk] = []
-    for i, (heading, text_block) in enumerate(merged):
+    for i, (heading, text_block, page_no) in enumerate(merged):
         if i > 0 and overlap_words > 0:
             prev_words = merged[i - 1][1].split()
             tail = " ".join(prev_words[-overlap_words:])
             text_block = tail + "\n\n" + text_block
-        chunks.append(Chunk(text=text_block, heading=heading, chunk_index=i))
+        chunks.append(Chunk(text=text_block, heading=heading, chunk_index=i, page_no=page_no))
 
     logger.debug("Chunking produced %d chunks from %d sections", len(chunks), len(sections))
     return chunks

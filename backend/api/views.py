@@ -2,15 +2,52 @@ import logging
 import tempfile
 from pathlib import Path
 
+from django.contrib.auth import authenticate
+from django.db.models import Count
 from rest_framework import status
+from rest_framework.authtoken.models import Token
 from rest_framework.parsers import JSONParser, MultiPartParser
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import services
+from .models import Conversation, Message
 from .serializers import ConvertRequestSerializer, IngestRequestSerializer, QueryRequestSerializer
 
 logger = logging.getLogger(__name__)
+
+
+class LoginView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    parser_classes = [JSONParser]
+
+    def post(self, request):
+        username = request.data.get("username", "").strip()
+        password = request.data.get("password", "")
+        if not username or not password:
+            return Response(
+                {"error": "Username and password required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        user = authenticate(request, username=username, password=password)
+        if not user:
+            logger.warning("LoginView — failed login for username=%r", username)
+            return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
+        token, _ = Token.objects.get_or_create(user=user)
+        logger.info("LoginView — user=%s logged in", username)
+        return Response({"token": token.key, "username": user.username})
+
+
+class LogoutView(APIView):
+    def post(self, request):
+        try:
+            request.user.auth_token.delete()
+        except Exception:
+            pass
+        logger.info("LogoutView — user=%s logged out", request.user.username)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class UploadView(APIView):
@@ -92,7 +129,7 @@ class ConvertView(APIView):
 
             converter = services.get_converter()
             result = converter.convert(str(file_path))
-            markdown = result.document.export_to_markdown()
+            markdown = result.document.export_to_markdown(page_break_placeholder="\f")
             logger.info("ConvertView — converted %d chars from %s", len(markdown), file_path.name)
 
             md_key = services.get_storage().upload_bytes(
@@ -199,6 +236,63 @@ class QueryView(APIView):
             return Response({"error": "Query failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class PdfViewView(APIView):
+    """GET /api/pdf/view?key=originals/... — serve original file inline for browser PDF viewer."""
+
+    def get(self, request):
+        import mimetypes
+        from django.http import HttpResponse
+
+        key = request.query_params.get("key", "")
+        if not key.startswith("originals/"):
+            return Response({"error": "Invalid key"}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            data = services.get_storage().download_bytes(key)
+        except Exception:
+            logger.exception("PdfViewView — not found: %s", key)
+            return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        content_type, _ = mimetypes.guess_type(key)
+        response = HttpResponse(data, content_type=content_type or "application/octet-stream")
+        response["Content-Disposition"] = f'inline; filename="{Path(key).name}"'
+        return response
+
+
+class DocumentsView(APIView):
+    """GET /api/documents — indexed documents with per-doc chunk counts."""
+
+    def get(self, request):
+        try:
+            vs_docs = services.get_vector_store().documents()
+
+            try:
+                originals = services.get_storage().list_objects(prefix="originals/")
+                orig_map = {
+                    Path(key).stem: {"key": key, "ext": Path(key).suffix.lstrip(".")}
+                    for key in originals
+                }
+            except Exception:
+                logger.warning("DocumentsView — could not list originals from MinIO")
+                orig_map = {}
+
+            result = []
+            for doc in vs_docs:
+                stem = Path(doc["source"]).stem
+                orig = orig_map.get(stem, {})
+                result.append({
+                    "source": doc["source"],
+                    "name": stem,
+                    "chunks": doc["chunks"],
+                    "original_key": orig.get("key"),
+                    "original_ext": orig.get("ext"),
+                })
+
+            return Response(result, status=status.HTTP_200_OK)
+        except Exception:
+            logger.exception("DocumentsView failed")
+            return Response({"error": "Failed to list documents"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
 class StatsView(APIView):
     """GET /api/stats/ — vector store statistics."""
 
@@ -231,3 +325,116 @@ class StorageListView(APIView):
         except Exception:
             logger.exception("StorageListView failed for prefix=%r", prefix)
             return Response({"error": "Storage list failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ConversationListCreateView(APIView):
+    """GET /api/conversations — list user conversations; POST — create."""
+
+    def get(self, request):
+        convs = (
+            Conversation.objects
+            .filter(user=request.user)
+            .annotate(message_count=Count("messages"))
+        )
+        return Response([
+            {
+                "id": c.id,
+                "title": c.title,
+                "created_at": c.created_at.isoformat(),
+                "updated_at": c.updated_at.isoformat(),
+                "message_count": c.message_count,
+            }
+            for c in convs
+        ])
+
+    def post(self, request):
+        title = request.data.get("title", "New conversation") or "New conversation"
+        conv = Conversation.objects.create(user=request.user, title=title)
+        return Response(
+            {
+                "id": conv.id,
+                "title": conv.title,
+                "created_at": conv.created_at.isoformat(),
+                "updated_at": conv.updated_at.isoformat(),
+                "message_count": 0,
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ConversationDetailView(APIView):
+    """PATCH /api/conversations/{pk} — rename; DELETE — delete."""
+
+    def _get(self, request, pk):
+        try:
+            return Conversation.objects.get(pk=pk, user=request.user)
+        except Conversation.DoesNotExist:
+            return None
+
+    def patch(self, request, pk):
+        conv = self._get(request, pk)
+        if conv is None:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        title = (request.data.get("title") or "").strip()
+        if title:
+            conv.title = title
+            conv.save(update_fields=["title", "updated_at"])
+        return Response({"id": conv.id, "title": conv.title})
+
+    def delete(self, request, pk):
+        conv = self._get(request, pk)
+        if conv is None:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        conv.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class MessageListCreateView(APIView):
+    """GET /api/conversations/{pk}/messages — list; POST — append one or many."""
+
+    def _get_conv(self, request, pk):
+        try:
+            return Conversation.objects.get(pk=pk, user=request.user)
+        except Conversation.DoesNotExist:
+            return None
+
+    def get(self, request, pk):
+        conv = self._get_conv(request, pk)
+        if conv is None:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response([
+            {
+                "id": m.id,
+                "role": m.role,
+                "content": m.content,
+                "citations": m.citations,
+                "duration_ms": m.duration_ms,
+                "created_at": m.created_at.isoformat(),
+            }
+            for m in conv.messages.all()
+        ])
+
+    def post(self, request, pk):
+        conv = self._get_conv(request, pk)
+        if conv is None:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        payload = request.data
+        messages_data = payload if isinstance(payload, list) else [payload]
+
+        created = []
+        for md in messages_data:
+            role = md.get("role", "")
+            if role not in ("user", "assistant"):
+                return Response({"error": f"Invalid role: {role!r}"}, status=status.HTTP_400_BAD_REQUEST)
+            m = Message.objects.create(
+                conversation=conv,
+                role=role,
+                content=md.get("content", ""),
+                citations=md.get("citations", []),
+                duration_ms=md.get("duration_ms"),
+            )
+            created.append({"id": m.id, "role": m.role})
+
+        conv.save(update_fields=["updated_at"])
+        return Response(created, status=status.HTTP_201_CREATED)
