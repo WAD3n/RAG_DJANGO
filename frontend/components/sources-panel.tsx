@@ -17,9 +17,7 @@ function openInPdf(objectName: string, passage: string, pageNo?: number) {
   const token = getToken();
   const params = new URLSearchParams({ key: objectName });
   if (token) params.set('_token', token);
-  const fragment = pageNo && pageNo > 1
-    ? `#page=${pageNo}`
-    : `#search=${encodeURIComponent(passage.replace(/\s+/g, ' ').trim().slice(0, 120))}`;
+  const fragment = pageNo != null ? `#page=${pageNo}` : '';
   window.open(`/api/pdf/view?${params}${fragment}`, '_blank');
 }
 

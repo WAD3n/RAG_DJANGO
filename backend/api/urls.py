@@ -11,6 +11,7 @@ urlpatterns = [
     path("query", views.QueryView.as_view()),
     path("pdf/view", views.PdfViewView.as_view()),
     path("documents", views.DocumentsView.as_view()),
+    path("models", views.ModelsView.as_view()),
     path("stats", views.StatsView.as_view()),
     path("storage", views.StorageListView.as_view()),
     path("conversations", views.ConversationListCreateView.as_view()),

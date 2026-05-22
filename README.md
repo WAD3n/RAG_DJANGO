@@ -54,9 +54,9 @@ System do indeksowania i odpytywania dokumentów (PDF, DOCX, XLSX, PPTX) przy u�
 
 ### Frontend — Next.js 14
 
-- **Ekran logowania** — Token authentication, dane trzymane w `localStorage`.
+- **Ekran logowania** — Token authentication (JWT-less, Django Token), dane trzymane w `localStorage`.
 - **Upload dokumentów** — Drag & drop, progress bar dla każdego etapu (upload → convert → ingest).
-- **Chat z dokumentami** — Historia konwersacji przypisana do użytkownika, lazy loading wiadomości przy przełączaniu.
+- **Chat z dokumentami** — Historia konwersacji przypisana do użytkownika, lazy loading wiadomości przy przełączaniu. Wybór modelu LLM z dropdownu obok przycisku "Ask".
 - **Panel źródeł** — Cytowane fragmenty z oceną podobieństwa, przycisk "Open in PDF" otwierający dokument na właściwej stronie (`#page=N`).
 - **Sidebar** — Lista dokumentów z filtrem, lista konwersacji z rename/delete.
 - Wszystkie wywołania `/api/*` są transparentnie proxowane do backendu przez custom route handler (`app/api/[...path]/route.ts`) z timeoutami (convert: 10 min, ingest: 5 min, query: 2 min).
@@ -74,6 +74,7 @@ Serwer HTTP na porcie 8000. Wszystkie endpointy (poza `/api/auth/login`) wymagaj
 | `/api/ingest` | POST | Pobiera Markdown z MinIO, chunkuje, embedduje, zapisuje do pgvector |
 | `/api/query` | POST | Wyszukiwanie wektorowe + generowanie odpowiedzi przez LLM |
 | `/api/documents` | GET | Lista zaindeksowanych dokumentów z liczbą chunków |
+| `/api/models` | GET | Dostępne modele LLM i aktywny backend |
 | `/api/stats` | GET | Łączna liczba chunków i źródeł |
 | `/api/pdf/view` | GET | Serwuje oryginalny plik inline (dla przeglądarki PDF) |
 | `/api/storage` | GET | Lista obiektów w MinIO |
@@ -106,8 +107,9 @@ heading      TEXT               -- nagłówek sekcji
 chunk_index  INTEGER
 page_no      INTEGER            -- numer strony w oryginalnym dokumencie
 content      TEXT               -- treść chunka
-embedding    vector(1024)       -- wektor mmlw-retrieval-roberta-large
+embedding    vector(N)          -- N=1024 (mmlw-roberta) lub N=768 (nomic-embed-text-v1.5)
 ```
+> Wymiar N jest ustawiany automatycznie przy starcie na podstawie modelu embeddingowego. Zmiana modelu powoduje usunięcie i odtworzenie tabeli — wymagane ponowne indeksowanie dokumentów.
 Indeks HNSW (`vector_cosine_ops`) przyspiesza wyszukiwanie podobieństwa.
 
 Tabele Django ORM: `auth_user`, `authtoken_token`, `api_conversation`, `api_message`.
@@ -149,7 +151,8 @@ Użytkownik
   └─[3]─► POST /api/ingest  { minio_key }
               └─► MinIO: pobierz converted/plik.md → temp
               └─► chunker: Markdown → N chunków po ~400 słów (śledzi page_no)
-              └─► SentenceTransformer: encode("Ustep: " + chunk)
+              └─► embedder: encode("Ustep: " / "search_document: " + chunk)
+              │           (lokalnie: SentenceTransformer / zdalnie: API)
               └─► pgvector: INSERT INTO chunks VALUES (...)
               └─► odpowiedź: { chunks: N }
 
@@ -164,7 +167,8 @@ Użytkownik wpisuje pytanie
   │
   └─► POST /api/query  { question }
           │
-          ├─[1] encode("Zapytanie: " + pytanie) → wektor zapytania
+          ├─[1] embed("Zapytanie: " + pytanie) → wektor zapytania
+          │       (lokalnie: mmlw-roberta / zdalnie: nomic-embed przez API)
           │
           ├─[2] SELECT content, source, heading, page_no,
           │           1-(embedding<=>q) AS score
@@ -178,9 +182,15 @@ Użytkownik wpisuje pytanie
 
 ### Model embeddingowy
 
-`sdadas/mmlw-retrieval-roberta-large` (1024 dim) — asymetryczne wyszukiwanie dla języka polskiego:
-- Zapytanie: prefix `"Zapytanie: "`
-- Fragment: prefix `"Ustep: "`
+Dwa tryby — wybór przez `REMOTE_EMBED_BASE_URL` w `.env`:
+
+**Lokalny (domyślny):** `sdadas/mmlw-retrieval-roberta-large` (1024 dim)
+- Asymetryczne wyszukiwanie dla języka polskiego
+- Zapytanie: prefix `"Zapytanie: "` · Fragment: prefix `"Ustep: "`
+
+**Zdalny (OpenAI-compatible API):** np. `nomic-ai/nomic-embed-text-v1.5` (768 dim) przez vLLM
+- Zapytanie: prefix `"search_query: "` · Fragment: prefix `"search_document: "`
+- Teksty obcinane do 4000 znaków przed wysłaniem (limit 2048 tokenów modelu)
 
 ---
 
@@ -311,28 +321,32 @@ python main.py store-stats
 Plik `.env` w katalogu głównym projektu. Wartości domyślne wystarczają dla lokalnego dev przy uruchomionej infrastrukturze Docker:
 
 ```env
-# Akcelerator: auto | cuda | cpu
 DEVICE=auto
-
-# OCR
 OCR_ENGINE=easyocr
 
-# LLM lokalny (Windows — vLLM nie jest obsługiwany)
-USE_LOCAL_LLM=true
-LOCAL_LLM_MODEL=Qwen/Qwen2.5-1.5B-Instruct
+# LLM: local | vllm | azure
+LLM_BACKEND=local
+LOCAL_LLM_MODEL=Qwen/Qwen2.5-0.5B-Instruct
 
-# PostgreSQL (Django ORM + pgvector)
+# Embeddings lokalne (domyślne)
+EMBEDDING_MODEL=sdadas/mmlw-retrieval-roberta-large
+
+# Embeddings zdalne — gdy ustawione, zastępuje lokalne
+# REMOTE_EMBED_BASE_URL=http://<host>:7666/v1
+# REMOTE_EMBED_DIM=768
+
+# PostgreSQL
 PG_DSN=postgresql://ragdocs:ragdocs@localhost:5432/ragdocs
 
 # MinIO
 MINIO_ENDPOINT=http://localhost:9000
 MINIO_ACCESS_KEY=minioadmin
 MINIO_SECRET_KEY=minioadmin
-MINIO_BUCKET=ragdocs
 
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS=["localhost:9094"]
 ```
+Pełna lista zmiennych z opisami w `.env.example`.
 
 > W Dockerze adresy `localhost` są automatycznie nadpisywane przez zmienne środowiskowe w `backend/docker-compose.yml` (`postgres:5432`, `minio:9000`, `kafka:9092`).
 
@@ -353,3 +367,79 @@ docker compose -f frontend\docker-compose.yml down
 docker compose -f backend\docker-compose.yml down -v
 docker compose down -v
 ```
+
+---
+
+## Backendy LLM
+
+Wybór backенdu przez zmienną `LLM_BACKEND` w `.env` (gdy `USE_LOCAL_LLM=false`):
+
+| Wartość | Backend | Opis |
+|---------|---------|------|
+| `local` | Qwen2.5-1.5B-Instruct | lokalnie na GPU, przez HuggingFace Transformers |
+| `azure` | Azure OpenAI | produkcyjny, wybór deploymentu z UI |
+| `vllm` | vLLM OpenAI API | kompatybilny endpoint `/v1/chat/completions` |
+
+### Azure OpenAI
+
+```env
+LLM_BACKEND=azure
+USE_LOCAL_LLM=false
+AZURE_ENDPOINT=https://<zasob>.cognitiveservices.azure.com/
+AZURE_API_KEY=<klucz>
+AZURE_API_VERSION=2024-02-01
+AZURE_DEPLOYMENT=gpt-5.4
+AZURE_DEPLOYMENTS=["gpt-5.4","gpt-4o"]   # lista w dropdownie UI
+```
+
+### Zdalny embedding (nomic-embed-text-v1.5 przez vLLM)
+
+Gdy `REMOTE_EMBED_BASE_URL` jest ustawiony, embedding odbywa się zdalnie zamiast lokalnie:
+
+```env
+REMOTE_EMBED_BASE_URL=http://<host>:7666/v1
+REMOTE_EMBED_MODEL=nomic-ai/nomic-embed-text-v1.5
+REMOTE_EMBED_API_KEY=EMPTY
+REMOTE_EMBED_DIM=768
+```
+
+Prefiksy dla nomic-embed: zapytanie → `search_query: `, fragment → `search_document: `.
+
+---
+
+## Observability
+
+Stack PLG (Prometheus + Loki + Grafana) uruchamia się automatycznie przez `.\start.ps1`.
+
+```powershell
+# Tylko observability
+docker compose -f observability\docker-compose.yml up -d
+```
+
+| Serwis | URL |
+|--------|-----|
+| Grafana | http://localhost:3001 (admin / admin) |
+| Prometheus | http://localhost:9090 |
+| Loki | http://localhost:3100 |
+
+### Dashboardy (auto-provisioned)
+
+**RAG — Logs**
+- Wolumen logów per serwis (wykres)
+- Logi na żywo: API, Consumer
+- Strumień błędów ze wszystkich serwisów
+
+**RAG — Container Metrics**
+- CPU i pamięć per kontener
+- Ruch sieciowy Rx/Tx
+- GPU: utilizacja (%), VRAM (użyte/wolne), temperatura, pobór mocy
+
+### Metryki GPU (DCGM Exporter)
+
+Wymagają NVIDIA Container Toolkit na hoście. Bez niego panele GPU pokazują "No data", reszta observability działa normalnie.
+
+Eksportowane metryki: `DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE`, `DCGM_FI_DEV_GPU_TEMP`, `DCGM_FI_DEV_POWER_USAGE`.
+
+### Metryki Django
+
+Backend eksponuje `/metrics` (django-prometheus) — Prometheus scrape co 15 s. Dostępne: liczniki requestów HTTP, latencja, garbage collector Python, liczniki ORM.

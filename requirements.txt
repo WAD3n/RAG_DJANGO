@@ -12,8 +12,10 @@ pydantic>=2.0
 pydantic-settings>=2.0
 typer>=0.9
 httpx>=0.25
+openai>=1.30
 rapidocr-onnxruntime
 onnxruntime
+django-prometheus>=0.3
 # RAG / vector store
 psycopg2-binary>=2.9
 pgvector>=0.3

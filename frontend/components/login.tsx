@@ -31,11 +31,6 @@ export default function Login({ onLogin }: LoginProps) {
   return (
     <div className="login-screen">
       <div className="login-card">
-        <div className="login-brand">
-          <div className="brand-mark">R</div>
-          <span className="login-wordmark">RAGFLOW</span>
-        </div>
-
         <form className="login-form" onSubmit={handleSubmit}>
           <div className="field">
             <label className="field-label" htmlFor="u">Username</label>
@@ -110,30 +105,6 @@ export default function Login({ onLogin }: LoginProps) {
           display: flex;
           flex-direction: column;
           gap: 22px;
-        }
-
-        .login-brand {
-          display: flex;
-          align-items: center;
-          gap: 11px;
-        }
-        .brand-mark {
-          width: 32px; height: 32px;
-          border-radius: 8px;
-          background: var(--accent);
-          color: var(--accent-fg);
-          display: grid;
-          place-items: center;
-          font-weight: 800;
-          font-size: 15px;
-          letter-spacing: -0.02em;
-          flex: none;
-        }
-        .login-wordmark {
-          font-size: 16px;
-          font-weight: 700;
-          letter-spacing: 0.08em;
-          color: var(--fg);
         }
 
         .login-form {

@@ -19,8 +19,8 @@ export default function Landing({ onStart }: LandingProps) {
           <span className="lp-title-accent">Ask grounded questions.</span>
         </h1>
         <p className="lp-sub">
-          RAGFLOW indexes your PDFs, decks, spreadsheets and notes — and answers
-          questions with citations back to the exact passage. Bring your own model,
+          Upload your PDFs, decks, spreadsheets and notes — get answers
+          with citations back to the exact passage. Bring your own model,
           keep your sources private.
         </p>
 

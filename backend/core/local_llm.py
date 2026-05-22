@@ -60,7 +60,7 @@ class LocalLLMClient:
         )
         self._pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
-    async def complete(self, prompt: str, system: str = "") -> str:
+    async def complete(self, prompt: str, system: str = "", model: str | None = None) -> str:
         messages = []
         if system:
             messages.append({"role": "system", "content": system})

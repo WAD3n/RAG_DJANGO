@@ -21,3 +21,4 @@ class IngestRequestSerializer(serializers.Serializer):
 class QueryRequestSerializer(serializers.Serializer):
     question = serializers.CharField()
     top_k = serializers.IntegerField(required=False, min_value=1, max_value=20, default=None)
+    model = serializers.CharField(required=False, default=None, allow_null=True)

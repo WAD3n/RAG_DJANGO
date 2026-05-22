@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'RAGFLOW — ask your documents anything',
-  description: 'Index your PDFs, decks, spreadsheets and notes. Answer questions with citations.',
+  title: 'RAG dla dokumentów',
+  description: 'Indeksuj dokumenty i odpytuj je przy użyciu modelu językowego.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

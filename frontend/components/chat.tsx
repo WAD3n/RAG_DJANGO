@@ -8,7 +8,7 @@ import DocsSidebar, { type Conversation } from './docs-sidebar';
 import Upload from './upload';
 import {
   addMessages, createConversation, deleteConversationApi,
-  getConversations, getDocuments, getMessages, queryDocuments, renameConversationApi,
+  getConversations, getDocuments, getMessages, getModels, queryDocuments, renameConversationApi,
 } from '../lib/api';
 import type { ChatMessage, Citation, Document, DocumentInfo, UploadedFile } from '../lib/types';
 
@@ -47,6 +47,31 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
   const [activeCite, setActiveCite] = React.useState<{ msgIdx: number; citeId: number }>({ msgIdx: -1, citeId: -1 });
   const [showUpload, setShowUpload] = React.useState(false);
   const scrollRef = React.useRef<HTMLDivElement>(null);
+
+  const [availableModels, setAvailableModels] = React.useState<string[]>([]);
+  const [activeModel, setActiveModel] = React.useState<string>('');
+  const [modelBackend, setModelBackend] = React.useState<string>('');
+  const [modelMenuOpen, setModelMenuOpen] = React.useState(false);
+  const modelMenuRef = React.useRef<HTMLDivElement>(null);
+
+  React.useEffect(() => {
+    getModels().then(data => {
+      setAvailableModels(data.models);
+      setActiveModel(data.active);
+      setModelBackend(data.backend);
+    }).catch(() => {});
+  }, []);
+
+  React.useEffect(() => {
+    if (!modelMenuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) {
+        setModelMenuOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [modelMenuOpen]);
 
   const thread = threads[activeConvId] ?? [];
   const activeConv = conversations.find(c => c.id === activeConvId)!;
@@ -216,7 +241,7 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
 
     try {
       const start = Date.now();
-      const result = await queryDocuments(question);
+      const result = await queryDocuments(question, activeModel || null);
       const durationMs = Date.now() - start;
 
       const citations: Citation[] = result.context.map((hit, i) => {
@@ -391,6 +416,38 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
               disabled={docs.length === 0 || streaming}
             />
             <div className="cv-comp-tools">
+              {availableModels.length > 0 && (
+                <>
+                  <div className="model-picker" ref={modelMenuRef}>
+                    <button
+                      type="button"
+                      className={`model-picker-btn mono${modelMenuOpen ? ' open' : ''}`}
+                      onClick={() => setModelMenuOpen(o => !o)}
+                      title={`LLM backend: ${modelBackend}`}
+                    >
+                      <span className="model-picker-label">{activeModel}</span>
+                      <Icon.ChevronDown size={11} />
+                    </button>
+                    {modelMenuOpen && (
+                      <div className="model-picker-menu">
+                        {availableModels.map(m => (
+                          <button
+                            key={m}
+                            type="button"
+                            className={`model-picker-item mono${m === activeModel ? ' active' : ''}`}
+                            onClick={() => { setActiveModel(m); setModelMenuOpen(false); }}
+                          >
+                            {m === activeModel && <Icon.Check size={11} />}
+                            {m !== activeModel && <span style={{ width: 11, display: 'inline-block' }} />}
+                            {m}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <span className="comp-sep" />
+                </>
+              )}
               <button
                 type="submit"
                 className={`btn accent sm${!input.trim() ? ' is-empty' : ''}`}
@@ -480,6 +537,42 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
           display: flex; align-items: center; gap: 8px; min-width: 0;
           overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
         }
+        .model-picker { position: relative; flex: none; }
+        .model-picker-btn {
+          display: inline-flex; align-items: center; gap: 5px;
+          height: 26px; padding: 0 8px;
+          border: 1px solid var(--border-strong); border-radius: 7px;
+          background: var(--bg-soft); color: var(--fg-muted);
+          font-size: 11.5px; font-family: inherit; cursor: pointer;
+          transition: border-color 120ms, color 120ms, background 120ms;
+          white-space: nowrap;
+        }
+        .model-picker-btn:hover, .model-picker-btn.open {
+          color: var(--fg); border-color: var(--accent);
+          background: color-mix(in oklab, var(--accent) 6%, var(--bg-soft));
+        }
+        .model-picker-label { max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+        .model-picker-menu {
+          position: absolute; bottom: calc(100% + 6px); right: 0;
+          min-width: 220px;
+          background: var(--bg-elev); border: 1px solid var(--border-strong);
+          border-radius: 10px; padding: 4px;
+          box-shadow: var(--shadow-pop);
+          z-index: 50;
+          display: flex; flex-direction: column; gap: 1px;
+        }
+        .model-picker-item {
+          display: flex; align-items: center; gap: 7px;
+          width: 100%; padding: 7px 10px;
+          border: 0; border-radius: 7px;
+          background: transparent; color: var(--fg-muted);
+          font-size: 12px; font-family: inherit; cursor: pointer;
+          text-align: left; transition: background 80ms, color 80ms;
+        }
+        .model-picker-item:hover { background: var(--bg-soft); color: var(--fg); }
+        .model-picker-item.active { color: var(--fg); }
+        .model-picker-item.active :global(svg) { color: var(--accent); }
+        .comp-sep { width: 1px; height: 16px; background: var(--border); flex: none; }
 
         .cv-thread { flex: 1; padding: 28px 12% 24px; min-height: 0; display: flex; flex-direction: column; gap: 22px; }
         .cv-empty {

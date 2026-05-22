@@ -26,7 +26,7 @@ class VLLMClient:
             self._model,
         )
 
-    async def complete(self, prompt: str, system: str = "") -> str:
+    async def complete(self, prompt: str, system: str = "", model: str | None = None) -> str:
         messages: list[dict] = []
         if system:
             messages.append({"role": "system", "content": system})
@@ -37,7 +37,7 @@ class VLLMClient:
             response = await self._http.post(
                 "/chat/completions",
                 json={
-                    "model": self._model,
+                    "model": model or self._model,
                     "messages": messages,
                     "max_tokens": self._max_tokens,
                     "temperature": self._temperature,

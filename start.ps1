@@ -22,14 +22,13 @@ param(
 $ErrorActionPreference = 'Continue'
 $root = $PSScriptRoot
 
-# BuildKit sends the project path as a gRPC header (ASCII-only).
-# Paths with non-ASCII chars (e.g. Polish letters) cause a parse error on Windows.
 $env:DOCKER_BUILDKIT          = '0'
 $env:COMPOSE_DOCKER_CLI_BUILD = '0'
 
-$infra    = "$root\docker-compose.yml"
-$backend  = "$root\backend\docker-compose.yml"
-$frontend = "$root\frontend\docker-compose.yml"
+$infra         = "$root\docker-compose.yml"
+$backend       = "$root\backend\docker-compose.yml"
+$frontend      = "$root\frontend\docker-compose.yml"
+$observability = "$root\observability\docker-compose.yml"
 
 function Write-Step { param($msg) Write-Host "`n>>> $msg" -ForegroundColor Cyan }
 function Write-OK   { param($msg) Write-Host "    [OK]  $msg" -ForegroundColor Green }
@@ -37,17 +36,16 @@ function Write-Warn { param($msg) Write-Host "    [!!]  $msg" -ForegroundColor Y
 function Write-Err  { param($msg) Write-Host "    [ERR] $msg" -ForegroundColor Red }
 function Write-Info { param($msg) Write-Host "          $msg" -ForegroundColor DarkGray }
 
-# ── Tryb zatrzymywania ────────────────────────────────────────────────────────
 if ($Down) {
     Write-Step "Zatrzymywanie wszystkich kontenerow..."
-    docker compose -f $frontend down
-    docker compose -f $backend  down
-    docker compose -f $infra    down
+    docker compose -f $observability down
+    docker compose -f $frontend      down
+    docker compose -f $backend       down
+    docker compose -f $infra         down
     Write-OK "Wszystkie kontenery zatrzymane."
     exit 0
 }
 
-# ── Sprawdzenie Dockera ───────────────────────────────────────────────────────
 Write-Step "Sprawdzanie Dockera..."
 docker info 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
@@ -56,7 +54,6 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-OK "Docker dziala."
 
-# ── 1. Infrastruktura (PostgreSQL, MinIO, Kafka) ──────────────────────────────
 Write-Step "Uruchamianie infrastruktury (PostgreSQL, MinIO, Kafka)..."
 docker compose -f $infra up -d
 if ($LASTEXITCODE -ne 0) { Write-Err "Blad startu infrastruktury."; exit 1 }
@@ -71,9 +68,17 @@ do {
 } until ($ready -or $elapsed -ge $timeout)
 
 if ($ready) { Write-OK "Infrastruktura gotowa." }
-else        { Write-Warn "Timeout healthcheck — kontynuuje mimo to." }
+else { Write-Warn "Timeout healthcheck - kontynuuje mimo to." }
 
-# ── 2. Backend (API + Kafka Consumer) ────────────────────────────────────────
+Write-Step "Uruchamianie observability (Grafana, Loki, Prometheus, cAdvisor, DCGM)..."
+if ($Build) {
+    docker compose -f $observability up -d --build
+} else {
+    docker compose -f $observability up -d
+}
+if ($LASTEXITCODE -ne 0) { Write-Warn "Blad startu observability - kontynuuje." }
+else { Write-OK "Observability uruchomione." }
+
 Write-Step "Uruchamianie backendu (API + Consumer)..."
 if ($Build) {
     docker compose -f $backend up -d --build
@@ -83,7 +88,6 @@ if ($Build) {
 if ($LASTEXITCODE -ne 0) { Write-Err "Blad startu backendu."; exit 1 }
 Write-OK "Backend uruchomiony."
 
-# ── 3. Opcjonalne: tworzenie pierwszego uzytkownika ───────────────────────────
 if ($CreateUser) {
     Write-Step "Tworzenie konta uzytkownika..."
     Write-Info "Czekam az API bedzie gotowe (maks. 60 s)..."
@@ -98,18 +102,16 @@ if ($CreateUser) {
     if ($apiReady) {
         $username = Read-Host "  Login"
         $password = Read-Host "  Haslo" -AsSecureString
-        $plainPwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto(
-            [Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
+        $plainPwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
         $script = "from django.contrib.auth.models import User; User.objects.filter(username='$username').exists() or User.objects.create_superuser('$username','','$plainPwd'); print('OK')"
         docker compose -f $backend exec api python manage.py shell -c $script
         if ($LASTEXITCODE -eq 0) { Write-OK "Konto '$username' gotowe." }
-        else                     { Write-Warn "Nie udalo sie utworzyc konta. Uzyj: docker compose -f backend\docker-compose.yml exec api python manage.py createsuperuser" }
+        else { Write-Warn "Nie udalo sie utworzyc konta. Uzyj: docker compose -f backend\docker-compose.yml exec api python manage.py createsuperuser" }
     } else {
-        Write-Warn "API nie odpowiada — pomijam tworzenie konta."
+        Write-Warn "API nie odpowiada - pomijam tworzenie konta."
     }
 }
 
-# ── 4. Frontend (Next.js) ─────────────────────────────────────────────────────
 Write-Step "Uruchamianie frontendu (Next.js)..."
 if ($Build) {
     docker compose -f $frontend up -d --build
@@ -119,7 +121,6 @@ if ($Build) {
 if ($LASTEXITCODE -ne 0) { Write-Err "Blad startu frontendu."; exit 1 }
 Write-OK "Frontend uruchomiony."
 
-# ── Podsumowanie ──────────────────────────────────────────────────────────────
 $line = "=" * 58
 Write-Host ""
 Write-Host $line -ForegroundColor Cyan
@@ -129,6 +130,8 @@ Write-Host "  Frontend     : " -NoNewline; Write-Host "http://localhost:3000" -F
 Write-Host "  Backend API  : " -NoNewline; Write-Host "http://localhost:8000/api/" -ForegroundColor White
 Write-Host "  MinIO UI     : " -NoNewline; Write-Host "http://localhost:9001  (minioadmin / minioadmin)" -ForegroundColor White
 Write-Host "  PostgreSQL   : " -NoNewline; Write-Host "localhost:5432  baza: ragdocs / ragdocs" -ForegroundColor White
+Write-Host "  Grafana      : " -NoNewline; Write-Host "http://localhost:3001  (admin / admin)" -ForegroundColor White
+Write-Host "  Prometheus   : " -NoNewline; Write-Host "http://localhost:9090" -ForegroundColor White
 Write-Host $line -ForegroundColor Cyan
 Write-Host ""
 Write-Host "  Pierwsze uruchomienie? Utworz konto:" -ForegroundColor DarkGray

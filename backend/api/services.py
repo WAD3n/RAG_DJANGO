@@ -39,14 +39,19 @@ def _load() -> None:
     from core.vectorstore import VectorStore
     _vector_store = VectorStore(_settings)
 
-    if _settings.use_local_llm:
-        logger.info("Loading LocalLLMClient — model=%s", _settings.local_llm_model)
-        from core.local_llm import LocalLLMClient
-        _llm = LocalLLMClient(_settings)
-    else:
+    backend = "local" if _settings.use_local_llm else _settings.llm_backend
+    if backend == "azure":
+        logger.info("Loading AzureOpenAIClient — endpoint=%s", _settings.azure_endpoint)
+        from core.azure_llm import AzureOpenAIClient
+        _llm = AzureOpenAIClient(_settings)
+    elif backend == "vllm":
         logger.info("Loading VLLMClient — base_url=%s", _settings.vllm_base_url)
         from core.llm import VLLMClient
         _llm = VLLMClient(_settings)
+    else:
+        logger.info("Loading LocalLLMClient — model=%s", _settings.local_llm_model)
+        from core.local_llm import LocalLLMClient
+        _llm = LocalLLMClient(_settings)
 
     logger.info("Loading StorageClient")
     from core.storage import StorageClient
@@ -166,7 +171,18 @@ def get_converter():
     return _converter
 
 
-def run_llm(prompt: str, system: str = "") -> str:
+def run_llm(prompt: str, system: str = "", model: str | None = None) -> str:
     """Sync wrapper around the async complete() interface."""
-    logger.debug("run_llm — prompt_len=%d", len(prompt))
-    return asyncio.run(get_llm().complete(prompt, system))
+    logger.debug("run_llm — prompt_len=%d model=%s", len(prompt), model)
+    return asyncio.run(get_llm().complete(prompt, system, model=model))
+
+
+def available_models() -> dict:
+    """Return backend name and list of selectable model/deployment IDs."""
+    cfg = get_settings()
+    backend = "local" if cfg.use_local_llm else cfg.llm_backend
+    if backend == "azure":
+        return {"backend": "azure", "active": cfg.azure_deployment, "models": cfg.azure_deployments}
+    if backend == "vllm":
+        return {"backend": "vllm", "active": cfg.vllm_model, "models": [cfg.vllm_model]}
+    return {"backend": "local", "active": cfg.local_llm_model, "models": [cfg.local_llm_model]}

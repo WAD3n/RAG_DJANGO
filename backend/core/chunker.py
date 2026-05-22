@@ -59,7 +59,7 @@ def chunk_markdown(
 ) -> list[Chunk]:
     logger.debug("Chunking document — %d chars, max_words=%d", len(text), max_words)
     text = _clean(text)
-    lines = text.splitlines()
+    lines = text.split('\n')
 
     # Phase 1: split into sections at every heading; track --- page breaks from docling
     sections: list[tuple[str, list[str], int]] = []

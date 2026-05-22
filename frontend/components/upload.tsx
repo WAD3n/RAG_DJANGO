@@ -24,10 +24,13 @@ const TYPE_LABELS: Record<string, string> = {
   'text/markdown': 'md', 'text/plain': 'txt',
 };
 
+const ACCEPTED_EXTS = new Set(['pdf','doc','docx','xls','xlsx','ppt','pptx','md','txt']);
+
 export default function Upload({ onComplete }: UploadProps) {
   const [files, setFiles] = React.useState<UploadedFile[]>([]);
   const [dragging, setDragging] = React.useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const folderRef = useRef<HTMLInputElement>(null);
 
   const updateFile = useCallback((id: string, patch: Partial<UploadedFile>) => {
     setFiles(prev => prev.map(f => f.id === id ? { ...f, ...patch } : f));
@@ -83,7 +86,20 @@ export default function Upload({ onComplete }: UploadProps) {
   }
 
   function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    if (e.target.files?.length) addFiles(e.target.files);
+    if (e.target.files?.length) {
+      addFiles(e.target.files);
+      e.target.value = '';
+    }
+  }
+
+  function handleFolderChange(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files?.length) return;
+    const filtered = Array.from(e.target.files).filter(f => {
+      const ext = f.name.split('.').pop()?.toLowerCase() || '';
+      return ACCEPTED_EXTS.has(ext);
+    });
+    if (filtered.length) addFiles(filtered);
+    e.target.value = '';
   }
 
   const allReady = files.length > 0 && files.every(f => f.status === 'ready' || f.status === 'error');
@@ -107,10 +123,12 @@ export default function Upload({ onComplete }: UploadProps) {
           onDragOver={e => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={handleDrop}
-          onClick={() => inputRef.current?.click()}
         >
           <input ref={inputRef} type="file" multiple accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.md,.txt"
                  style={{ display: 'none' }} onChange={handleInputChange} />
+          <input ref={folderRef} type="file" multiple style={{ display: 'none' }}
+                 onChange={handleFolderChange}
+                 {...({ webkitdirectory: '' } as React.InputHTMLAttributes<HTMLInputElement>)} />
           <div className="dz-illu">
             <div className="dz-page p1"><div /><div /><div /></div>
             <div className="dz-page p2"><div /><div /><div /></div>
@@ -124,6 +142,14 @@ export default function Upload({ onComplete }: UploadProps) {
             <div className="dz-sub muted">
               PDF · DOCX · XLSX · PPTX · MD · TXT — up to 200&nbsp;MB each
             </div>
+          </div>
+          <div className="dz-actions">
+            <button type="button" className="dz-btn" onClick={e => { e.preventDefault(); inputRef.current?.click(); }}>
+              <Icon.File size={12} /> Select files
+            </button>
+            <button type="button" className="dz-btn" onClick={e => { e.preventDefault(); folderRef.current?.click(); }}>
+              <Icon.Folder size={12} /> Select folder
+            </button>
           </div>
           <div className="dz-shortcut">
             <span className="kbd-key mono">⌘</span><span className="kbd-key mono">U</span>
@@ -215,8 +241,17 @@ export default function Upload({ onComplete }: UploadProps) {
           z-index: 3;
         }
         .dz-text { text-align: center; }
-        .dz-title { font-size: 15px; font-weight: 500; }
-        .dz-sub { font-size: 13px; margin-top: 4px; }
+        .dz-title { font-size: 15px; font-weight: 500; color: var(--fg); }
+        .dz-sub { font-size: 13.5px; margin-top: 4px; }
+        .dz-actions { display: flex; gap: 8px; }
+        .dz-btn {
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 5px 12px; border-radius: 8px; font-size: 12.5px; font-weight: 500;
+          border: 1px solid var(--border-strong); background: var(--bg);
+          color: var(--fg); cursor: pointer;
+          transition: border-color 120ms, color 120ms;
+        }
+        .dz-btn:hover { border-color: var(--accent); color: var(--accent); }
         .dz-shortcut { position: absolute; right: 14px; top: 14px; display: flex; gap: 3px; }
 
         .files-block {
@@ -228,7 +263,7 @@ export default function Upload({ onComplete }: UploadProps) {
           padding: 12px 16px; border-bottom: 1px solid var(--border);
         }
         .files-head-l, .files-head-r { display: flex; align-items: center; gap: 8px; }
-        .files-title { font-weight: 600; font-size: 14px; }
+        .files-title { font-weight: 600; font-size: 14px; color: var(--fg); }
         .files-list { display: flex; flex-direction: column; }
         .files-foot {
           display: flex; justify-content: space-between; align-items: center;
@@ -287,12 +322,12 @@ function FileRow({ f }: { f: UploadedFile }) {
         .frow-top {
           display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
         }
-        .frow-name { font-weight: 500; font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .frow-meta { font-size: 11.5px; flex: none; }
+        .frow-name { font-weight: 500; font-size: 13.5px; color: var(--fg); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .frow-meta { font-size: 12px; flex: none; color: var(--fg-muted); }
         .frow-status { display: flex; align-items: center; gap: 10px; margin-top: 6px; }
         .frow-status :global(.progress) { flex: 1; }
         .frow-state {
-          font-size: 11px; color: var(--fg-muted);
+          font-size: 12px; color: var(--fg-muted);
           display: inline-flex; align-items: center; gap: 6px;
           min-width: 150px; justify-content: flex-end;
         }

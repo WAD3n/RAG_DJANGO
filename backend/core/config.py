@@ -31,8 +31,11 @@ class Settings(BaseSettings):
     ocr_engine: OcrEngine = OcrEngine.EASYOCR
     ocr_languages: list[str] = Field(default=["en", "pl"])
 
-    # LLM backend
-    use_local_llm: bool = False
+    # LLM backend: local | vllm | azure
+    llm_backend: str = "local"
+    use_local_llm: bool = False  # legacy alias — overrides llm_backend to "local" when True
+
+    # local (HuggingFace transformers)
     local_llm_model: str = "Qwen/Qwen2.5-0.5B-Instruct"
 
     # vLLM / Ollama OpenAI-compatible server
@@ -43,16 +46,30 @@ class Settings(BaseSettings):
     vllm_temperature: float = 0.1
     vllm_timeout: float = 120.0
 
+    # Azure OpenAI
+    azure_endpoint: str = ""
+    azure_api_key: str = ""
+    azure_api_version: str = "2024-12-01-preview"
+    azure_deployment: str = "gpt-5.4"
+    azure_deployments: list[str] = Field(default=["gpt-5.4"])
+
     # VLM pipeline (Qwen2.5-VL-3B-Instruct)
     use_vlm: bool = False
     vlm_load_in_8bit: bool = False
     vlm_flash_attention2: bool = False
 
-    # Embeddings
+    # Embeddings — local (SentenceTransformer)
     embedding_model: str = "sdadas/mmlw-retrieval-roberta-large"
     chunk_size: int = 400
     chunk_overlap: int = 40
     retrieval_top_k: int = 5
+
+    # Embeddings — remote OpenAI-compatible endpoint (e.g. vLLM)
+    # When set, the remote API is used instead of the local SentenceTransformer.
+    remote_embed_base_url: str = ""
+    remote_embed_model: str = "nomic-ai/nomic-embed-text-v1.5"
+    remote_embed_api_key: str = "EMPTY"
+    remote_embed_dim: int = 768  # output dimension of the remote model (nomic-embed-text-v1.5 = 768)
 
     # PostgreSQL / pgvector
     pg_dsn: str = "postgresql://ragdocs:ragdocs@localhost:5432/ragdocs"

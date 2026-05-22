@@ -29,8 +29,8 @@
   --bg-soft:   #17171a;
   --bg-softer: #1c1c20;
   --fg:        #f0ede8;
-  --fg-muted:  #b8b4ac;
-  --fg-faint:  #857f77;
+  --fg-muted:  #ccc8c0;
+  --fg-faint:  #a09890;
   --border:    #262629;
   --border-strong: #363640;
   --accent-soft: color-mix(in oklab, var(--accent) 20%, transparent);

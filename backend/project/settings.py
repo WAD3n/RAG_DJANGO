@@ -4,8 +4,8 @@ from urllib.parse import urlparse
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SECRET_KEY = "ragdocs-local-dev-insecure-key"
-DEBUG = True
+SECRET_KEY = os.environ.get("SECRET_KEY", "ragdocs-local-dev-insecure-key")
+DEBUG = os.environ.get("DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = ["*"]
 APPEND_SLASH = False
 
@@ -14,11 +14,14 @@ INSTALLED_APPS = [
     "django.contrib.auth",
     "rest_framework",
     "rest_framework.authtoken",
+    "django_prometheus",
     "api.apps.ApiConfig",
 ]
 
 MIDDLEWARE = [
+    "django_prometheus.middleware.PrometheusBeforeMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django_prometheus.middleware.PrometheusAfterMiddleware",
 ]
 
 ROOT_URLCONF = "project.urls"

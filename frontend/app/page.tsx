@@ -44,11 +44,6 @@ export default function Page() {
   return (
     <div className={`app theme-${dark ? 'dark' : 'light'} density-regular`}>
       <header className="topbar">
-        <div className="brand">
-          <div className="brand-mark">R</div>
-          RAGFLOW
-        </div>
-
         <div className="spacer" />
 
         <button className="icon-btn" onClick={() => setDark(d => !d)} title="Toggle theme">

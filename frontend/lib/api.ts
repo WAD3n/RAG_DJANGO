@@ -78,13 +78,19 @@ export async function ingestFile(minioKey: string): Promise<{ chunks: number }> 
   return res.json();
 }
 
-export async function queryDocuments(question: string): Promise<QueryResponse> {
+export async function queryDocuments(question: string, model?: string | null): Promise<QueryResponse> {
   const res = await fetch(`${BASE}/query`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...auth() },
-    body: JSON.stringify({ question }),
+    body: JSON.stringify({ question, ...(model ? { model } : {}) }),
   });
   if (!res.ok) throw new Error(`Query failed: ${res.statusText}`);
+  return res.json();
+}
+
+export async function getModels(): Promise<{ backend: string; active: string; models: string[] }> {
+  const res = await fetch(`${BASE}/models`, { headers: auth() });
+  if (!res.ok) throw new Error(`Models failed: ${res.statusText}`);
   return res.json();
 }
 

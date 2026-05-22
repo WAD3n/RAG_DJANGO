@@ -1,0 +1,66 @@
+{
+  "title": "RAG — Logs",
+  "uid": "rag-logs",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Log volume by service",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 6 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum by (service) (rate({service=~\"api|consumer|frontend\"}[1m]))",
+          "legendFormat": "{{service}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "API logs",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 6, "w": 12, "h": 14 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "dedupStrategy": "none", "showTime": true, "wrapLogMessage": true },
+      "targets": [
+        {
+          "expr": "{service=\"api\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Consumer logs",
+      "type": "logs",
+      "gridPos": { "x": 12, "y": 6, "w": 12, "h": 14 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "dedupStrategy": "none", "showTime": true, "wrapLogMessage": true },
+      "targets": [
+        {
+          "expr": "{service=\"consumer\"}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error logs — all services",
+      "type": "logs",
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 10 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "options": { "dedupStrategy": "none", "showTime": true, "wrapLogMessage": true },
+      "targets": [
+        {
+          "expr": "{service=~\"api|consumer|frontend\"} |= \"ERROR\"",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

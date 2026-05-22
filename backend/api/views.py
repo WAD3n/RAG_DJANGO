@@ -204,7 +204,8 @@ class QueryView(APIView):
 
         question = ser.validated_data["question"]
         top_k = ser.validated_data.get("top_k")
-        logger.info("QueryView — question=%r top_k=%s", question[:80], top_k)
+        model = ser.validated_data.get("model") or None
+        logger.info("QueryView — question=%r top_k=%s model=%s", question[:80], top_k, model)
 
         try:
             store = services.get_vector_store()
@@ -227,6 +228,7 @@ class QueryView(APIView):
                     "Answer the question using only the provided context fragments. "
                     "If the answer is not contained in the fragments, say so explicitly."
                 ),
+                model=model,
             )
             logger.info("QueryView complete — hits=%d answer_len=%d", len(hits), len(answer))
             return Response({"answer": answer, "context": hits}, status=status.HTTP_200_OK)
@@ -291,6 +293,17 @@ class DocumentsView(APIView):
         except Exception:
             logger.exception("DocumentsView failed")
             return Response({"error": "Failed to list documents"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class ModelsView(APIView):
+    """GET /api/models/ — available LLM models/deployments."""
+
+    def get(self, request):
+        try:
+            return Response(services.available_models(), status=status.HTTP_200_OK)
+        except Exception:
+            logger.exception("ModelsView failed")
+            return Response({"error": "Could not retrieve models"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class StatsView(APIView):
