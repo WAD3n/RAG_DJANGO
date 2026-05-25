@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+<meta charset="UTF-8">
+<title>RAG dla dokumentów — Architektura</title>
+<style>
+* { margin: 0; padding: 0; }
+body {
+  background: #0d1117;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 24px;
+}
+</style>
+</head>
+<body>
+<svg viewBox="0 0 780 920" width="780" height="920"
+     xmlns="http://www.w3.org/2000/svg"
+     font-family="'Segoe UI', system-ui, -apple-system, sans-serif">
+
+<defs>
+  <pattern id="grid" x="0" y="0" width="24" height="24" patternUnits="userSpaceOnUse">
+    <circle cx="0.5" cy="0.5" r="0.7" fill="#161b22"/>
+  </pattern>
+
+  <marker id="arr" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+    <polygon points="0,0 9,3.5 0,7" fill="#484f58"/>
+  </marker>
+  <marker id="arr-cyan" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+    <polygon points="0,0 9,3.5 0,7" fill="#39c5cf"/>
+  </marker>
+  <marker id="arr-purple" markerWidth="9" markerHeight="7" refX="8" refY="3.5" orient="auto">
+    <polygon points="0,0 9,3.5 0,7" fill="#7c4fcf"/>
+  </marker>
+
+  <filter id="glow-blue" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur stdDeviation="3" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+  <filter id="glow-green" x="-20%" y="-20%" width="140%" height="140%">
+    <feGaussianBlur stdDeviation="3" result="blur"/>
+    <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+  </filter>
+</defs>
+
+<!-- Background -->
+<rect width="780" height="920" fill="#0d1117"/>
+<rect width="780" height="920" fill="url(#grid)"/>
+
+<!-- ── TITLE ── -->
+<text x="390" y="26" text-anchor="middle"
+      fill="#30363d" font-size="9.5" letter-spacing="3.5" font-weight="700">
+  RAG DLA DOKUMENTÓW  ·  ARCHITEKTURA SYSTEMU
+</text>
+
+<!-- ══════════════════════════════════════════
+     BROWSER
+══════════════════════════════════════════ -->
+<rect x="355" y="43" width="70" height="42" rx="6" fill="#161b22" stroke="#30363d" stroke-width="1.5"/>
+<rect x="355" y="43" width="70" height="13" rx="6" fill="#21262d"/>
+<rect x="355" y="51" width="70" height="5" fill="#21262d"/>
+<circle cx="364" cy="49.5" r="2.5" fill="#f85149" opacity="0.9"/>
+<circle cx="374" cy="49.5" r="2.5" fill="#f0883e" opacity="0.9"/>
+<circle cx="384" cy="49.5" r="2.5" fill="#3fb950" opacity="0.9"/>
+<text x="390" y="80" text-anchor="middle" fill="#6e7681" font-size="10" font-weight="600" letter-spacing="1.5">PRZEGLĄDARKA</text>
+
+<!-- arrow: browser → frontend -->
+<line x1="390" y1="85" x2="390" y2="106" stroke="#21262d" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="402" y="98" fill="#484f58" font-size="8.5">http://localhost:3000</text>
+
+<!-- ══════════════════════════════════════════
+     FRONTEND
+══════════════════════════════════════════ -->
+<rect x="120" y="108" width="540" height="80" rx="8"
+      fill="#09172d" stroke="#1f6feb" stroke-width="1.5" filter="url(#glow-blue)"/>
+<text x="390" y="133" text-anchor="middle"
+      fill="#58a6ff" font-size="14" font-weight="700" letter-spacing="0.5">FRONTEND  (Next.js 14)</text>
+<text x="390" y="152" text-anchor="middle"
+      fill="#484f58" font-size="10">port 3000  ·  TypeScript  ·  App Router  ·  styled-jsx</text>
+<text x="390" y="170" text-anchor="middle"
+      fill="#6e7681" font-size="9.5">upload  ·  chat  ·  docs-sidebar  ·  sources-panel  ·  lib/api.ts</text>
+
+<!-- arrow: frontend → backend -->
+<line x1="390" y1="188" x2="390" y2="248" stroke="#21262d" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="402" y="221" fill="#484f58" font-size="8.5">HTTP  /api/*</text>
+
+<!-- ══════════════════════════════════════════
+     BACKEND API
+══════════════════════════════════════════ -->
+<rect x="120" y="250" width="540" height="102" rx="8"
+      fill="#091a10" stroke="#238636" stroke-width="1.5" filter="url(#glow-green)"/>
+<text x="390" y="275" text-anchor="middle"
+      fill="#3fb950" font-size="14" font-weight="700" letter-spacing="0.5">BACKEND API  (Django REST Framework)</text>
+<text x="390" y="294" text-anchor="middle"
+      fill="#484f58" font-size="10">port 8000  ·  Python 3.11  ·  CUDA 12.4  ·  services.py singletons</text>
+
+<!-- endpoint chips -->
+<rect x="145" y="304" width="150" height="24" rx="5" fill="#0d2214" stroke="#23863655" stroke-width="1"/>
+<text x="220" y="320" text-anchor="middle" fill="#3fb950" font-size="8.5">POST /documents/  (upload)</text>
+
+<rect x="308" y="304" width="164" height="24" rx="5" fill="#0d2214" stroke="#23863655" stroke-width="1"/>
+<text x="390" y="320" text-anchor="middle" fill="#3fb950" font-size="8.5">POST /query/  (RAG sync)</text>
+
+<rect x="485" y="304" width="150" height="24" rx="5" fill="#0d2214" stroke="#23863655" stroke-width="1"/>
+<text x="560" y="320" text-anchor="middle" fill="#3fb950" font-size="8.5">GET /documents/  (list)</text>
+
+<!-- arrow: backend → minio -->
+<line x1="222" y1="352" x2="167" y2="457"
+      stroke="#4d5566" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="152" y="404" fill="#484f58" font-size="8.5" text-anchor="middle">store</text>
+
+<!-- arrow: backend → kafka -->
+<line x1="558" y1="352" x2="613" y2="457"
+      stroke="#4d5566" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="624" y="404" fill="#484f58" font-size="8.5">publish</text>
+
+<!-- ══════════════════════════════════════════
+     MINIO
+══════════════════════════════════════════ -->
+<rect x="48" y="460" width="230" height="94" rx="8"
+      fill="#160e2e" stroke="#6e40c9" stroke-width="1.5"/>
+<text x="163" y="487" text-anchor="middle"
+      fill="#a371f7" font-size="13" font-weight="700">MinIO  (S3)</text>
+<text x="163" y="506" text-anchor="middle"
+      fill="#484f58" font-size="10">port 9000</text>
+<text x="163" y="523" text-anchor="middle"
+      fill="#6e7681" font-size="9.5">originals/  ·  converted/</text>
+<text x="163" y="540" text-anchor="middle"
+      fill="#6e7681" font-size="9.5">object storage</text>
+
+<!-- ══════════════════════════════════════════
+     KAFKA
+══════════════════════════════════════════ -->
+<rect x="502" y="460" width="230" height="94" rx="8"
+      fill="#1a0e04" stroke="#b76e3d" stroke-width="1.5"/>
+<text x="617" y="487" text-anchor="middle"
+      fill="#f0883e" font-size="13" font-weight="700">Kafka  (KRaft)</text>
+<text x="617" y="506" text-anchor="middle"
+      fill="#484f58" font-size="10">port 9094</text>
+<text x="617" y="523" text-anchor="middle"
+      fill="#6e7681" font-size="9.5">topic: document-jobs</text>
+<text x="617" y="540" text-anchor="middle"
+      fill="#6e7681" font-size="9.5">no Zookeeper (KRaft)</text>
+
+<!-- arrow: minio → consumer  (down then right) -->
+<path d="M 163,554 V 648 H 298"
+      fill="none" stroke="#4d5566" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="128" y="598" fill="#484f58" font-size="8.5">download</text>
+
+<!-- arrow: kafka → consumer (diagonal) -->
+<line x1="577" y1="554" x2="538" y2="632"
+      stroke="#4d5566" stroke-width="1.5" marker-end="url(#arr)"/>
+<text x="570" y="594" fill="#484f58" font-size="8.5">consume</text>
+
+<!-- ══════════════════════════════════════════
+     KAFKA CONSUMER
+══════════════════════════════════════════ -->
+<rect x="294" y="635" width="310" height="132" rx="8"
+      fill="#160c02" stroke="#b76e3d" stroke-width="1.5" stroke-dasharray="6,3"/>
+<text x="449" y="660" text-anchor="middle"
+      fill="#f0883e" font-size="13" font-weight="700">KAFKA CONSUMER</text>
+<text x="449" y="678" text-anchor="middle"
+      fill="#484f58" font-size="9.5">manage.py run_consumer</text>
+<text x="449" y="697" text-anchor="middle"
+      fill="#6e7681" font-size="9">① download from MinIO</text>
+<text x="449" y="714" text-anchor="middle"
+      fill="#6e7681" font-size="9">② OCR  ·  docling  ·  PyPdfiumDocumentBackend</text>
+<text x="449" y="731" text-anchor="middle"
+      fill="#6e7681" font-size="9">③ chunk text  (chunker.py)</text>
+<text x="449" y="748" text-anchor="middle"
+      fill="#6e7681" font-size="9">④ embed  →  mmlw-retrieval-roberta-large</text>
+
+<!-- arrow: consumer → postgresql -->
+<line x1="418" y1="767" x2="400" y2="815"
+      stroke="#39c5cf" stroke-width="1.5" marker-end="url(#arr-cyan)"/>
+<text x="448" y="794" fill="#39c5cf" font-size="8.5">INSERT vectors</text>
+
+<!-- ══════════════════════════════════════════
+     POSTGRESQL + pgvector
+══════════════════════════════════════════ -->
+<rect x="190" y="818" width="415" height="70" rx="8"
+      fill="#07192a" stroke="#1b6f8a" stroke-width="1.5"/>
+<text x="397" y="844" text-anchor="middle"
+      fill="#39c5cf" font-size="14" font-weight="700">PostgreSQL  +  pgvector</text>
+<text x="397" y="862" text-anchor="middle"
+      fill="#484f58" font-size="10">port 5432  ·  chunks  ·  embeddings  ·  documents  ·  history</text>
+
+<!-- ══════════════════════════════════════════
+     RAG QUERY PATH  (dashed, right side)
+══════════════════════════════════════════ -->
+<path d="M 660,301 H 730 V 853 H 605"
+      fill="none"
+      stroke="#7c4fcf" stroke-width="1.5" stroke-dasharray="5,3"
+      marker-end="url(#arr-purple)"/>
+<!-- vertical label along the right edge -->
+<text text-anchor="middle" fill="#7c4fcf" font-size="8.5"
+      transform="translate(744,577) rotate(90)">
+  POST /query/  →  cosine search  →  Qwen2.5-1.5B-Instruct
+</text>
+
+<!-- ── FOOTER ── -->
+<text x="390" y="907" text-anchor="middle"
+      fill="#21262d" font-size="9" letter-spacing="2">
+  docker network: ragdla  ·  PostgreSQL · MinIO · Kafka  via  docker-compose.yml
+</text>
+
+</svg>
+</body>
+</html>
