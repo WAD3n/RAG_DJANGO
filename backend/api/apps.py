@@ -18,6 +18,11 @@ class ApiConfig(AppConfig):
         if is_dev_parent:
             logger.debug("Dev-server parent process — skipping model init")
             return
+        # Skip heavyweight service initialisation when running the test suite.
+        from django.conf import settings as django_settings
+        if getattr(django_settings, "TESTING", False):
+            logger.debug("TESTING=True — skipping service initialisation")
+            return
         logger.info("App ready — starting model initialisation")
         from . import services
         services.init_all()

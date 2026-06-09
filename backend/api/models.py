@@ -25,3 +25,24 @@ class Message(models.Model):
 
     class Meta:
         ordering = ['created_at']
+
+
+class Workspace(models.Model):
+    name = models.CharField(max_length=100, unique=True)
+    slug = models.SlugField(max_length=100, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    members = models.ManyToManyField(
+        User, through='WorkspaceMembership', related_name='workspaces'
+    )
+
+    def __str__(self):
+        return self.name
+
+
+class WorkspaceMembership(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE)
+    joined_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('user', 'workspace')]
