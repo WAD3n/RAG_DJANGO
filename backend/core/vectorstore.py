@@ -146,13 +146,19 @@ class VectorStore:
                 ALTER TABLE chunks ADD COLUMN IF NOT EXISTS page_no INTEGER NOT NULL DEFAULT 1
             """)
             cur.execute("""
+                ALTER TABLE chunks ADD COLUMN IF NOT EXISTS workspace_id INTEGER
+            """)
+            cur.execute("""
+                CREATE INDEX IF NOT EXISTS chunks_workspace_idx ON chunks (workspace_id)
+            """)
+            cur.execute("""
                 CREATE INDEX IF NOT EXISTS chunks_hnsw_idx
                 ON chunks USING hnsw (embedding vector_cosine_ops)
             """)
         self._conn.commit()
         logger.debug("Schema ready")
 
-    def ingest(self, md_path: Path) -> int:
+    def ingest(self, md_path: Path, workspace_id: int | None = None) -> int:
         logger.info("Ingesting — source=%s", md_path.name)
         text = md_path.read_text(encoding="utf-8")
         chunks: list[Chunk] = chunk_markdown(
@@ -177,14 +183,15 @@ class VectorStore:
             for chunk, emb in zip(chunks, embeddings, strict=True):
                 cur.execute(
                     """
-                    INSERT INTO chunks (id, source, heading, chunk_index, page_no, content, embedding)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s)
+                    INSERT INTO chunks (id, source, heading, chunk_index, page_no, content, embedding, workspace_id)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
                     ON CONFLICT (id) DO UPDATE SET
-                        content     = EXCLUDED.content,
-                        heading     = EXCLUDED.heading,
-                        chunk_index = EXCLUDED.chunk_index,
-                        page_no     = EXCLUDED.page_no,
-                        embedding   = EXCLUDED.embedding
+                        content      = EXCLUDED.content,
+                        heading      = EXCLUDED.heading,
+                        chunk_index  = EXCLUDED.chunk_index,
+                        page_no      = EXCLUDED.page_no,
+                        embedding    = EXCLUDED.embedding,
+                        workspace_id = EXCLUDED.workspace_id
                     """,
                     (
                         f"{md_path.stem}::{chunk.chunk_index}",
@@ -194,30 +201,44 @@ class VectorStore:
                         chunk.page_no,
                         chunk.text,
                         emb,
+                        workspace_id,
                     ),
                 )
         self._conn.commit()
         logger.info("Ingest complete — source=%s chunks=%d", md_path.name, len(chunks))
         return len(chunks)
 
-    def search(self, query: str, n: int | None = None) -> list[dict]:
+    def search(self, query: str, n: int | None = None, workspace_id: int | None = None) -> list[dict]:
         k = n or self._settings.retrieval_top_k
-        logger.info("Vector search — query=%r top_k=%d", query[:60], k)
+        logger.info("Vector search — query=%r top_k=%d workspace_id=%s", query[:60], k, workspace_id)
         try:
             q_emb: np.ndarray = self._embedder.embed(
                 [self._embedder.QUERY_PREFIX + query]
             )[0]
             with self._conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT content, source, heading, page_no,
-                           1 - (embedding <=> %s) AS score
-                    FROM chunks
-                    ORDER BY embedding <=> %s
-                    LIMIT %s
-                    """,
-                    (q_emb, q_emb, k),
-                )
+                if workspace_id is not None:
+                    cur.execute(
+                        """
+                        SELECT content, source, heading, page_no,
+                               1 - (embedding <=> %s) AS score
+                        FROM chunks
+                        WHERE workspace_id = %s
+                        ORDER BY embedding <=> %s
+                        LIMIT %s
+                        """,
+                        (q_emb, workspace_id, q_emb, k),
+                    )
+                else:
+                    cur.execute(
+                        """
+                        SELECT content, source, heading, page_no,
+                               1 - (embedding <=> %s) AS score
+                        FROM chunks
+                        ORDER BY embedding <=> %s
+                        LIMIT %s
+                        """,
+                        (q_emb, q_emb, k),
+                    )
                 rows = cur.fetchall()
         except Exception:
             self._conn.rollback()
@@ -237,14 +258,23 @@ class VectorStore:
         logger.debug("Search returned %d results", len(results))
         return results
 
-    def documents(self) -> list[dict]:
+    def documents(self, workspace_id: int | None = None) -> list[dict]:
         with self._conn.cursor() as cur:
-            cur.execute("""
-                SELECT source, COUNT(*) AS chunk_count
-                FROM chunks
-                GROUP BY source
-                ORDER BY source
-            """)
+            if workspace_id is not None:
+                cur.execute("""
+                    SELECT source, COUNT(*) AS chunk_count
+                    FROM chunks
+                    WHERE workspace_id = %s
+                    GROUP BY source
+                    ORDER BY source
+                """, (workspace_id,))
+            else:
+                cur.execute("""
+                    SELECT source, COUNT(*) AS chunk_count
+                    FROM chunks
+                    GROUP BY source
+                    ORDER BY source
+                """)
             rows = cur.fetchall()
         return [{"source": row[0], "chunks": row[1]} for row in rows]
 
