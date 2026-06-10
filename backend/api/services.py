@@ -131,15 +131,22 @@ def get_producer():
     return _producer
 
 
-def publish_file_uploaded(object_name: str, filename: str) -> None:
+def publish_file_uploaded(
+    object_name: str,
+    filename: str,
+    workspace_id: int | None = None,
+    file_size_bytes: int = 0,
+) -> None:
     import datetime
-    logger.info("Publishing rag.file.uploaded — object=%s", object_name)
+    logger.info("Publishing rag.file.uploaded — object=%s workspace_id=%s", object_name, workspace_id)
     future = get_producer().send(
         get_settings().kafka_topic_file_uploaded,
         {
             "object_name": object_name,
             "filename": filename,
             "uploaded_at": datetime.datetime.utcnow().isoformat(),
+            "workspace_id": workspace_id,
+            "file_size_bytes": file_size_bytes,
         },
     )
     get_producer().flush()

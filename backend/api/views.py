@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from . import services
-from .models import Conversation, Message
+from .models import Conversation, Message, Workspace, WorkspaceMembership
 from .serializers import ConvertRequestSerializer, IngestRequestSerializer, QueryRequestSerializer
 
 logger = logging.getLogger(__name__)
@@ -36,6 +36,13 @@ class LoginView(APIView):
             logger.warning("LoginView — failed login for username=%r", username)
             return Response({"error": "Invalid credentials"}, status=status.HTTP_401_UNAUTHORIZED)
         token, _ = Token.objects.get_or_create(user=user)
+        # Auto-create "default" workspace for new users
+        if not Workspace.objects.filter(members=user).exists():
+            from django.utils.text import slugify
+            slug = f"default-{slugify(user.username)}"
+            ws, _ = Workspace.objects.get_or_create(slug=slug, defaults={"name": "default"})
+            WorkspaceMembership.objects.get_or_create(user=user, workspace=ws)
+            logger.info("LoginView — created default workspace for user=%s", username)
         logger.info("LoginView — user=%s logged in", username)
         return Response({"token": token.key, "username": user.username})
 
@@ -64,8 +71,21 @@ class UploadView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        object_name = f"originals/{file.name}"
-        logger.info("UploadView — file=%s size=%d", file.name, file.size)
+        workspace_id = request.data.get("workspace_id")
+        if workspace_id:
+            try:
+                workspace_id = int(workspace_id)
+                if not Workspace.objects.filter(id=workspace_id, members=request.user).exists():
+                    return Response(
+                        {"error": "Workspace not found or access denied"},
+                        status=status.HTTP_403_FORBIDDEN,
+                    )
+            except (ValueError, TypeError):
+                return Response({"error": "Invalid workspace_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+        ws_prefix = str(workspace_id) if workspace_id is not None else "global"
+        object_name = f"originals/{ws_prefix}/{file.name}"
+        logger.info("UploadView — file=%s size=%d workspace_id=%s", file.name, file.size, workspace_id)
         try:
             services.get_storage().upload_bytes(
                 data=file.read(),
@@ -75,7 +95,7 @@ class UploadView(APIView):
 
             pipeline_triggered = True
             try:
-                services.publish_file_uploaded(object_name, file.name)
+                services.publish_file_uploaded(object_name, file.name, workspace_id=workspace_id, file_size_bytes=file.size)
             except Exception:
                 logger.exception("Kafka publish failed for %s — pipeline not triggered", object_name)
                 pipeline_triggered = False
@@ -205,7 +225,8 @@ class QueryView(APIView):
         question = ser.validated_data["question"]
         top_k = ser.validated_data.get("top_k")
         model = ser.validated_data.get("model") or None
-        logger.info("QueryView — question=%r top_k=%s model=%s", question[:80], top_k, model)
+        workspace_id = ser.validated_data.get("workspace_id")
+        logger.info("QueryView — question=%r top_k=%s model=%s workspace_id=%s", question[:80], top_k, model, workspace_id)
 
         try:
             store = services.get_vector_store()
@@ -217,7 +238,7 @@ class QueryView(APIView):
                     status=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 )
 
-            hits = store.search(question, n=top_k)
+            hits = store.search(question, n=top_k, workspace_id=workspace_id)
             context = "\n\n---\n\n".join(
                 f"[{h['source']} / {h['heading']}]\n{h['text']}" for h in hits
             )
@@ -230,8 +251,29 @@ class QueryView(APIView):
                 ),
                 model=model,
             )
+
+            import json as _json
+            judge_result = None
+            judge_prompt = (
+                f"Context fragments:\n{context}\n\n"
+                f"Question: {question}\nAnswer: {answer}\n\n"
+                "Evaluate the answer. Return JSON only:\n"
+                '{"verdict": "PASS|WARN|FAIL", "score": 1-10, '
+                '"reasoning": "<one sentence>", '
+                '"flags": ["hallucination"|"incomplete"|"off_topic"]}'
+            )
+            try:
+                judge_raw = services.run_llm(
+                    prompt=judge_prompt,
+                    system="You are an answer quality evaluator. Return only valid JSON, no other text.",
+                )
+                judge_result = _json.loads(judge_raw)
+                logger.info("Judge — verdict=%s score=%s", judge_result.get("verdict"), judge_result.get("score"))
+            except Exception:
+                logger.warning("Judge failed or returned unparseable JSON", exc_info=True)
+
             logger.info("QueryView complete — hits=%d answer_len=%d", len(hits), len(answer))
-            return Response({"answer": answer, "context": hits}, status=status.HTTP_200_OK)
+            return Response({"answer": answer, "context": hits, "judge": judge_result}, status=status.HTTP_200_OK)
 
         except Exception:
             logger.exception("QueryView failed for question=%r", question[:80])
@@ -260,15 +302,58 @@ class PdfViewView(APIView):
         return response
 
 
+class DocumentSummaryView(APIView):
+    """GET /api/documents/summary/?source=<md>&workspace_id=<id>"""
+
+    def get(self, request):
+        from .models import DocumentSummary
+        source = request.query_params.get("source", "")
+        workspace_id = request.query_params.get("workspace_id")
+        if not source or not workspace_id:
+            return Response(
+                {"error": "source and workspace_id required"},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            workspace_id = int(workspace_id)
+        except ValueError:
+            return Response({"error": "Invalid workspace_id"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not Workspace.objects.filter(id=workspace_id, members=request.user).exists():
+            return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            s = DocumentSummary.objects.get(workspace_id=workspace_id, source=source)
+        except DocumentSummary.DoesNotExist:
+            return Response({"error": "No summary found"}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response({
+            "source": s.source,
+            "summary": s.summary,
+            "file_size_bytes": s.file_size_bytes,
+            "generated_at": s.generated_at.isoformat(),
+        })
+
+
 class DocumentsView(APIView):
     """GET /api/documents — indexed documents with per-doc chunk counts."""
 
     def get(self, request):
+        workspace_id = request.query_params.get("workspace_id")
+        if workspace_id:
+            try:
+                workspace_id = int(workspace_id)
+            except ValueError:
+                workspace_id = None
         try:
-            vs_docs = services.get_vector_store().documents()
+            vs_docs = services.get_vector_store().documents(workspace_id=workspace_id)
 
             try:
-                originals = services.get_storage().list_objects(prefix="originals/")
+                ws_prefix = str(workspace_id) if workspace_id is not None else "global"
+                originals = services.get_storage().list_objects(prefix=f"originals/{ws_prefix}/")
+                if not originals:
+                    originals = services.get_storage().list_objects(prefix="originals/")
+                    originals = [k for k in originals if "/" not in k[len("originals/"):]]
                 orig_map = {
                     Path(key).stem: {"key": key, "ext": Path(key).suffix.lstrip(".")}
                     for key in originals
@@ -293,6 +378,50 @@ class DocumentsView(APIView):
         except Exception:
             logger.exception("DocumentsView failed")
             return Response({"error": "Failed to list documents"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class DocumentDeleteView(APIView):
+    """DELETE /api/documents/delete?source=doc.md&workspace_id=3&original_key=originals/3/doc.pdf"""
+
+    def delete(self, request):
+        source = request.query_params.get("source", "").strip()
+        original_key = request.query_params.get("original_key", "").strip()
+        workspace_id_raw = request.query_params.get("workspace_id")
+
+        if not source:
+            return Response({"error": "source required"}, status=status.HTTP_400_BAD_REQUEST)
+
+        workspace_id = None
+        if workspace_id_raw:
+            try:
+                workspace_id = int(workspace_id_raw)
+            except (ValueError, TypeError):
+                return Response({"error": "Invalid workspace_id"}, status=status.HTTP_400_BAD_REQUEST)
+            if not request.user.is_staff:
+                if not Workspace.objects.filter(id=workspace_id, members=request.user).exists():
+                    return Response({"error": "Access denied"}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            deleted_chunks = services.get_vector_store().delete(source, workspace_id=workspace_id)
+        except Exception:
+            logger.exception("DocumentDeleteView — failed to delete chunks for source=%s", source)
+            return Response({"error": "Failed to delete chunks"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        storage = services.get_storage()
+        if original_key and original_key.startswith("originals/"):
+            try:
+                storage.delete_object(original_key)
+            except Exception:
+                logger.warning("DocumentDeleteView — could not delete original: %s", original_key)
+
+        stem = Path(source).stem
+        try:
+            storage.delete_object(f"converted/{stem}.md")
+        except Exception:
+            pass
+
+        logger.info("DocumentDeleteView — source=%s deleted_chunks=%d", source, deleted_chunks)
+        return Response({"deleted_chunks": deleted_chunks}, status=status.HTTP_200_OK)
 
 
 class ModelsView(APIView):
@@ -338,6 +467,99 @@ class StorageListView(APIView):
         except Exception:
             logger.exception("StorageListView failed for prefix=%r", prefix)
             return Response({"error": "Storage list failed"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class WorkspaceListCreateView(APIView):
+    """GET /api/workspaces — list user's workspaces; POST — create."""
+
+    def get(self, request):
+        from .serializers import WorkspaceSerializer
+        workspaces = Workspace.objects.filter(members=request.user)
+        return Response(WorkspaceSerializer(workspaces, many=True).data)
+
+    def post(self, request):
+        from .serializers import WorkspaceSerializer
+        from django.utils.text import slugify
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return Response({"error": "name required"}, status=status.HTTP_400_BAD_REQUEST)
+        base_slug = slugify(f"{name}-{request.user.username}")
+        slug = base_slug
+        counter = 1
+        while Workspace.objects.filter(slug=slug).exists():
+            slug = f"{base_slug}-{counter}"
+            counter += 1
+        ws = Workspace.objects.create(name=name, slug=slug)
+        WorkspaceMembership.objects.create(user=request.user, workspace=ws)
+        return Response(WorkspaceSerializer(ws).data, status=status.HTTP_201_CREATED)
+
+
+class WorkspaceDetailView(APIView):
+    """PATCH /api/workspaces/<pk> — rename; DELETE — delete (owner only)."""
+
+    def _get(self, request, pk):
+        try:
+            return Workspace.objects.get(pk=pk, members=request.user)
+        except Workspace.DoesNotExist:
+            return None
+
+    def patch(self, request, pk):
+        from .serializers import WorkspaceSerializer
+        ws = self._get(request, pk)
+        if ws is None:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        name = (request.data.get("name") or "").strip()
+        if not name:
+            return Response({"error": "name required"}, status=status.HTTP_400_BAD_REQUEST)
+        ws.name = name
+        ws.save(update_fields=["name"])
+        return Response(WorkspaceSerializer(ws).data)
+
+    def delete(self, request, pk):
+        ws = self._get(request, pk)
+        if ws is None:
+            return Response({"error": "Not found"}, status=status.HTTP_404_NOT_FOUND)
+        ws.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+class WorkspaceMembersView(APIView):
+    """POST /api/workspaces/<id>/members/ — add member (staff); DELETE .../<uid>/ — remove."""
+
+    def _get_workspace(self, pk):
+        try:
+            return Workspace.objects.get(pk=pk)
+        except Workspace.DoesNotExist:
+            return None
+
+    def post(self, request, pk):
+        from django.contrib.auth.models import User as DjangoUser
+        if not request.user.is_staff:
+            return Response({"error": "Staff only"}, status=status.HTTP_403_FORBIDDEN)
+        ws = self._get_workspace(pk)
+        if ws is None:
+            return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
+        user_id = request.data.get("user_id")
+        try:
+            target = DjangoUser.objects.get(pk=user_id)
+        except DjangoUser.DoesNotExist:
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+        _, created = WorkspaceMembership.objects.get_or_create(user=target, workspace=ws)
+        return Response(
+            {"workspace_id": ws.id, "user_id": target.id, "created": created},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def delete(self, request, pk, user_id):
+        if not request.user.is_staff:
+            return Response({"error": "Staff only"}, status=status.HTTP_403_FORBIDDEN)
+        ws = self._get_workspace(pk)
+        if ws is None:
+            return Response({"error": "Workspace not found"}, status=status.HTTP_404_NOT_FOUND)
+        deleted, _ = WorkspaceMembership.objects.filter(workspace=ws, user_id=user_id).delete()
+        if not deleted:
+            return Response({"error": "Membership not found"}, status=status.HTTP_404_NOT_FOUND)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class ConversationListCreateView(APIView):
@@ -422,6 +644,7 @@ class MessageListCreateView(APIView):
                 "content": m.content,
                 "citations": m.citations,
                 "duration_ms": m.duration_ms,
+                "judge_result": m.judge_result,
                 "created_at": m.created_at.isoformat(),
             }
             for m in conv.messages.all()
@@ -446,6 +669,7 @@ class MessageListCreateView(APIView):
                 content=md.get("content", ""),
                 citations=md.get("citations", []),
                 duration_ms=md.get("duration_ms"),
+                judge_result=md.get("judge_result"),
             )
             created.append({"id": m.id, "role": m.role})
 

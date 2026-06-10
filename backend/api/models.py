@@ -21,6 +21,7 @@ class Message(models.Model):
     content = models.TextField()
     citations = models.JSONField(default=list, blank=True)
     duration_ms = models.IntegerField(null=True, blank=True)
+    judge_result = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -28,8 +29,8 @@ class Message(models.Model):
 
 
 class Workspace(models.Model):
-    name = models.CharField(max_length=100, unique=True)
-    slug = models.SlugField(max_length=100, unique=True)
+    name = models.CharField(max_length=100)
+    slug = models.SlugField(max_length=120, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     members = models.ManyToManyField(
         User, through='WorkspaceMembership', related_name='workspaces'
@@ -46,3 +47,17 @@ class WorkspaceMembership(models.Model):
 
     class Meta:
         unique_together = [('user', 'workspace')]
+
+
+class DocumentSummary(models.Model):
+    workspace = models.ForeignKey(Workspace, on_delete=models.CASCADE, related_name='summaries')
+    source = models.CharField(max_length=500)
+    summary = models.TextField()
+    file_size_bytes = models.BigIntegerField()
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [('workspace', 'source')]
+
+    def __str__(self):
+        return f"{self.workspace.slug}/{self.source}"

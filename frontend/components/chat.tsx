@@ -7,10 +7,11 @@ import SourcesPanel from './sources-panel';
 import DocsSidebar, { type Conversation } from './docs-sidebar';
 import Upload from './upload';
 import {
-  addMessages, createConversation, deleteConversationApi,
-  getConversations, getDocuments, getMessages, getModels, queryDocuments, renameConversationApi,
+  addMessages, createConversation, createWorkspace, deleteConversationApi, deleteDocument,
+  deleteWorkspace, getConversations, getDocumentSummary, getDocuments, getMessages, getModels,
+  getWorkspaces, queryDocuments, renameConversationApi, renameWorkspace,
 } from '../lib/api';
-import type { ChatMessage, Citation, Document, DocumentInfo, UploadedFile } from '../lib/types';
+import type { ChatMessage, Citation, Document, DocumentInfo, JudgeResult, UploadedFile, Workspace } from '../lib/types';
 
 const DOC_COLORS = ['#d97757', '#6b8af0', '#5b8c6a', '#c4884f', '#9a6cc4', '#4aa8d8', '#c45b5b'];
 
@@ -19,6 +20,11 @@ interface ChatProps {
   onLogout: () => void;
   sidebarPosition: 'left' | 'right';
   citationStyle: 'numbered' | 'pill' | 'underline';
+  workspaceId: number | null;
+  workspaceName?: string;
+  workspaces: Workspace[];
+  onWorkspaceChange?: (id: number) => void;
+  onWorkspacesChange?: (ws: Workspace[]) => void;
 }
 
 const SUGGESTIONS = [
@@ -32,7 +38,7 @@ function makeConv(title = 'New conversation'): Conversation {
   return { id: `conv-${Date.now()}-${Math.random().toString(36).slice(2)}`, title, createdAt: Date.now(), messageCount: 0 };
 }
 
-export default function Chat({ username, onLogout, sidebarPosition, citationStyle }: ChatProps) {
+export default function Chat({ username, onLogout, sidebarPosition, citationStyle, workspaceId, workspaceName, workspaces, onWorkspaceChange, onWorkspacesChange }: ChatProps) {
   const [docs, setDocs] = React.useState<Document[]>([]);
   const [docsLoading, setDocsLoading] = React.useState(true);
   const [activeDocs, setActiveDocs] = React.useState<string[]>([]);
@@ -46,6 +52,8 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
   const [streaming, setStreaming] = React.useState(false);
   const [activeCite, setActiveCite] = React.useState<{ msgIdx: number; citeId: number }>({ msgIdx: -1, citeId: -1 });
   const [showUpload, setShowUpload] = React.useState(false);
+  const [uploadWorkspaceId, setUploadWorkspaceId] = React.useState<number | null>(workspaceId);
+  React.useEffect(() => { setUploadWorkspaceId(workspaceId); }, [workspaceId]);
   const scrollRef = React.useRef<HTMLDivElement>(null);
 
   const [availableModels, setAvailableModels] = React.useState<string[]>([]);
@@ -82,7 +90,7 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
 
   const loadDocuments = React.useCallback(async () => {
     try {
-      const infos = await getDocuments();
+      const infos = await getDocuments(workspaceId);
       const loaded: Document[] = infos.map((info: DocumentInfo, i: number) => ({
         id: info.source,
         name: info.original_ext ? `${info.name}.${info.original_ext}` : info.name,
@@ -100,7 +108,7 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
     } finally {
       setDocsLoading(false);
     }
-  }, []);
+  }, [workspaceId]);
 
   React.useEffect(() => { loadDocuments(); }, [loadDocuments]);
 
@@ -125,6 +133,7 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
         content: m.content,
         citations: m.citations ?? [],
         durationMs: m.duration_ms ?? undefined,
+        judgeResult: m.judge_result ?? null,
       }));
       setThreads(prev => ({ ...prev, [id]: chatMsgs }));
     } catch (err) {
@@ -241,7 +250,7 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
 
     try {
       const start = Date.now();
-      const result = await queryDocuments(question, activeModel || null);
+      const result = await queryDocuments(question, activeModel || null, workspaceId);
       const durationMs = Date.now() - start;
 
       const citations: Citation[] = result.context.map((hit, i) => {
@@ -253,13 +262,14 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
       });
 
       const fullAnswer = result.answer;
+      const judgeResult = result.judge ?? null;
       let charIdx = 0;
       const tick = () => {
         charIdx += 3 + Math.floor(Math.random() * 4);
         const piece = fullAnswer.slice(0, Math.min(charIdx, fullAnswer.length));
         updateThread(convId, prev => {
           const copy = [...prev];
-          copy[copy.length - 1] = { role: 'assistant', content: piece, citations, durationMs };
+          copy[copy.length - 1] = { role: 'assistant', content: piece, citations, durationMs, judgeResult };
           return copy;
         });
         if (charIdx < fullAnswer.length) {
@@ -274,7 +284,7 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
           if (bid !== null) {
             addMessages(bid, [
               { role: 'user', content: question },
-              { role: 'assistant', content: fullAnswer, citations, duration_ms: durationMs },
+              { role: 'assistant', content: fullAnswer, citations, duration_ms: durationMs, judge_result: judgeResult },
             ]).catch(() => {});
           }
         }
@@ -298,6 +308,40 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
   const activeMsg = thread[activeCite.msgIdx];
   const activeCitation = activeMsg?.citations?.find(c => c.id === activeCite.citeId);
 
+  async function handleGetSummary(source: string): Promise<string | null> {
+    if (workspaceId == null) return null;
+    try {
+      const data = await getDocumentSummary(source, workspaceId);
+      return data.summary;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleCreateWorkspace(name: string) {
+    const ws = await createWorkspace(name);
+    const updated = await getWorkspaces();
+    onWorkspacesChange?.(updated);
+    onWorkspaceChange?.(ws.id);
+  }
+
+  async function handleRenameWorkspace(id: number, name: string) {
+    await renameWorkspace(id, name);
+    const updated = await getWorkspaces();
+    onWorkspacesChange?.(updated);
+  }
+
+  async function handleDeleteWorkspace(id: number) {
+    await deleteWorkspace(id);
+    const updated = await getWorkspaces();
+    onWorkspacesChange?.(updated);
+  }
+
+  async function handleDeleteDoc(doc: Document) {
+    await deleteDocument(doc.id, workspaceId, doc.objectName);
+    await loadDocuments();
+  }
+
   const sidebar = (
     <DocsSidebar
       docs={docs} activeDocs={activeDocs} toggleDoc={toggleDoc}
@@ -310,6 +354,15 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
       onDeleteConversation={deleteConversation}
       username={username}
       onLogout={onLogout}
+      workspaceName={workspaceName}
+      onGetSummary={workspaceId != null ? handleGetSummary : undefined}
+      workspaces={workspaces}
+      activeWorkspaceId={workspaceId}
+      onWorkspaceChange={onWorkspaceChange}
+      onCreateWorkspace={handleCreateWorkspace}
+      onRenameWorkspace={handleRenameWorkspace}
+      onDeleteWorkspace={handleDeleteWorkspace}
+      onDeleteDoc={handleDeleteDoc}
     />
   );
 
@@ -392,6 +445,7 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
               key={i} msg={m} idx={i}
               activeCite={activeCite} setActiveCite={setActiveCite}
               citationStyle={citationStyle} docs={docs}
+              model={activeModel || undefined}
             />
           ))}
           {streaming && thread.length > 0 && thread[thread.length - 1].content === '' && (
@@ -481,12 +535,18 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
         <div className="upload-overlay">
           <div className="upload-overlay-header">
             <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--fg)' }}>Upload documents</span>
+            <div style={{ flex: 1 }} />
             <button className="icon-btn" onClick={() => setShowUpload(false)} title="Close">
               <Icon.Close size={14} />
             </button>
           </div>
           <div className="upload-overlay-body scroll">
-            <Upload onComplete={handleUploadComplete} />
+            <Upload
+              onComplete={handleUploadComplete}
+              workspaceId={uploadWorkspaceId}
+              workspaces={workspaces}
+              onWorkspaceIdChange={setUploadWorkspaceId}
+            />
           </div>
         </div>
       )}
@@ -632,7 +692,7 @@ export default function Chat({ username, onLogout, sidebarPosition, citationStyl
           display: flex; flex-direction: column;
         }
         .upload-overlay-header {
-          display: flex; align-items: center; justify-content: space-between;
+          display: flex; align-items: center; gap: 12px;
           padding: 0 20px; height: 48px;
           border-bottom: 1px solid var(--border); flex: none;
         }

@@ -178,8 +178,18 @@ class VectorStore:
             logger.exception("Embedding failed for %s", md_path.name)
             raise
 
+        ws_prefix = str(workspace_id) if workspace_id is not None else "global"
         with self._conn.cursor() as cur:
-            cur.execute("DELETE FROM chunks WHERE source = %s", (md_path.name,))
+            if workspace_id is not None:
+                cur.execute(
+                    "DELETE FROM chunks WHERE source = %s AND workspace_id = %s",
+                    (md_path.name, workspace_id),
+                )
+            else:
+                cur.execute(
+                    "DELETE FROM chunks WHERE source = %s AND workspace_id IS NULL",
+                    (md_path.name,),
+                )
             for chunk, emb in zip(chunks, embeddings, strict=True):
                 cur.execute(
                     """
@@ -194,7 +204,7 @@ class VectorStore:
                         workspace_id = EXCLUDED.workspace_id
                     """,
                     (
-                        f"{md_path.stem}::{chunk.chunk_index}",
+                        f"{ws_prefix}::{md_path.stem}::{chunk.chunk_index}",
                         md_path.name,
                         chunk.heading,
                         chunk.chunk_index,
@@ -222,7 +232,7 @@ class VectorStore:
                         SELECT content, source, heading, page_no,
                                1 - (embedding <=> %s) AS score
                         FROM chunks
-                        WHERE workspace_id = %s
+                        WHERE workspace_id = %s OR workspace_id IS NULL
                         ORDER BY embedding <=> %s
                         LIMIT %s
                         """,
@@ -234,6 +244,7 @@ class VectorStore:
                         SELECT content, source, heading, page_no,
                                1 - (embedding <=> %s) AS score
                         FROM chunks
+                        WHERE workspace_id IS NULL
                         ORDER BY embedding <=> %s
                         LIMIT %s
                         """,
@@ -258,13 +269,32 @@ class VectorStore:
         logger.debug("Search returned %d results", len(results))
         return results
 
+    def delete(self, source: str, workspace_id: int | None = None) -> int:
+        logger.info("Deleting chunks — source=%s workspace_id=%s", source, workspace_id)
+        with self._conn.cursor() as cur:
+            if workspace_id is not None:
+                cur.execute(
+                    "DELETE FROM chunks WHERE source = %s AND workspace_id = %s",
+                    (source, workspace_id),
+                )
+            else:
+                cur.execute(
+                    "DELETE FROM chunks WHERE source = %s AND workspace_id IS NULL",
+                    (source,),
+                )
+            deleted = cur.rowcount
+        self._conn.commit()
+        logger.info("Deleted %d chunks for source=%s", deleted, source)
+        return deleted
+
     def documents(self, workspace_id: int | None = None) -> list[dict]:
         with self._conn.cursor() as cur:
             if workspace_id is not None:
+                # include global docs (workspace_id IS NULL) so legacy data stays visible
                 cur.execute("""
                     SELECT source, COUNT(*) AS chunk_count
                     FROM chunks
-                    WHERE workspace_id = %s
+                    WHERE workspace_id = %s OR workspace_id IS NULL
                     GROUP BY source
                     ORDER BY source
                 """, (workspace_id,))
@@ -272,6 +302,7 @@ class VectorStore:
                 cur.execute("""
                     SELECT source, COUNT(*) AS chunk_count
                     FROM chunks
+                    WHERE workspace_id IS NULL
                     GROUP BY source
                     ORDER BY source
                 """)

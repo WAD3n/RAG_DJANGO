@@ -4,7 +4,8 @@ import React from 'react';
 import * as Icon from '../components/icons';
 import Login from '../components/login';
 import Chat from '../components/chat';
-import { loadToken, logout } from '../lib/api';
+import { getWorkspaces, loadToken, logout } from '../lib/api';
+import type { Workspace } from '../lib/types';
 
 type Screen = 'login' | 'chat';
 
@@ -12,6 +13,13 @@ export default function Page() {
   const [screen, setScreen] = React.useState<Screen>('login');
   const [username, setUsername] = React.useState('');
   const [dark, setDark] = React.useState(true);
+  const [workspaces, setWorkspaces] = React.useState<Workspace[]>([]);
+  const [activeWorkspaceId, setActiveWorkspaceId] = React.useState<number | null>(null);
+
+  function applyWorkspaces(ws: Workspace[]) {
+    setWorkspaces(ws);
+    if (ws.length > 0) setActiveWorkspaceId(ws[0].id);
+  }
 
   React.useEffect(() => {
     const token = loadToken();
@@ -20,6 +28,7 @@ export default function Page() {
         ? (localStorage.getItem('ragflow_username') || '')
         : '';
       setUsername(saved);
+      getWorkspaces().then(applyWorkspaces).catch(() => {});
       setScreen('chat');
     }
   }, []);
@@ -29,6 +38,7 @@ export default function Page() {
       localStorage.setItem('ragflow_username', name);
     }
     setUsername(name);
+    getWorkspaces().then(applyWorkspaces).catch(() => {});
     setScreen('chat');
   }
 
@@ -38,8 +48,19 @@ export default function Page() {
       localStorage.removeItem('ragflow_username');
     }
     setUsername('');
+    setWorkspaces([]);
+    setActiveWorkspaceId(null);
     setScreen('login');
   }
+
+  function handleWorkspacesChange(ws: Workspace[]) {
+    setWorkspaces(ws);
+    if (!ws.find(w => w.id === activeWorkspaceId) && ws.length > 0) {
+      setActiveWorkspaceId(ws[0].id);
+    }
+  }
+
+  const activeWorkspace = workspaces.find(w => w.id === activeWorkspaceId);
 
   return (
     <div className={`app theme-${dark ? 'dark' : 'light'} density-regular`}>
@@ -58,6 +79,11 @@ export default function Page() {
           onLogout={handleLogout}
           sidebarPosition="left"
           citationStyle="numbered"
+          workspaceId={activeWorkspaceId}
+          workspaceName={activeWorkspace?.name}
+          workspaces={workspaces}
+          onWorkspaceChange={setActiveWorkspaceId}
+          onWorkspacesChange={handleWorkspacesChange}
         />
       )}
 

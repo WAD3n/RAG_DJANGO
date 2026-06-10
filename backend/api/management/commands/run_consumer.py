@@ -42,6 +42,17 @@ class Command(BaseCommand):
             storage = StorageClient(cfg)
             converter = build_document_converter(cfg)
             store = VectorStore(cfg)
+            import asyncio as _asyncio
+            _backend = "local" if cfg.use_local_llm else cfg.llm_backend
+            if _backend == "azure":
+                from core.azure_llm import AzureOpenAIClient
+                llm = AzureOpenAIClient(cfg)
+            elif _backend == "vllm":
+                from core.llm import VLLMClient
+                llm = VLLMClient(cfg)
+            else:
+                from core.local_llm import LocalLLMClient
+                llm = LocalLLMClient(cfg)
         except Exception:
             logger.exception("Failed to load models")
             self.stderr.write(self.style.ERROR("Model loading failed — check logs"))
@@ -79,8 +90,10 @@ class Command(BaseCommand):
             data = message.value
             object_name: str = data.get("object_name", "")
             filename: str = data.get("filename", Path(object_name).name)
-            logger.info("Received message — object=%s", object_name)
-            self.stdout.write(f"\n[+] Received: {object_name}")
+            workspace_id = data.get("workspace_id")
+            file_size_bytes: int = data.get("file_size_bytes", 0)
+            logger.info("Received message — object=%s workspace_id=%s", object_name, workspace_id)
+            self.stdout.write(f"\n[+] Received: {object_name} (workspace_id={workspace_id})")
 
             tmp_dir = tempfile.mkdtemp()
             try:
@@ -90,7 +103,7 @@ class Command(BaseCommand):
                 self.stdout.write(f"    Downloaded  {filename}")
 
                 result = converter.convert(str(file_path))
-                markdown = result.document.export_to_markdown()
+                markdown = result.document.export_to_markdown(page_break_placeholder="\f")
                 logger.info("Converted — source=%s chars=%d", filename, len(markdown))
                 self.stdout.write(f"    Converted   {len(markdown):,} chars")
 
@@ -106,9 +119,25 @@ class Command(BaseCommand):
                 logger.info("Uploaded markdown — key=%s", md_key)
                 self.stdout.write(f"    Uploaded    minio://{cfg.minio_bucket}/{md_key}")
 
-                n = store.ingest(out)
+                n = store.ingest(out, workspace_id=workspace_id)
                 logger.info("Indexed — source=%s chunks=%d", filename, n)
-                self.stdout.write(self.style.SUCCESS(f"    Indexed     {n} chunks  →  {filename} done"))
+                self.stdout.write(self.style.SUCCESS(f"    Indexed     {n} chunks  ->  {filename} done"))
+
+                if workspace_id is not None and file_size_bytes >= cfg.summary_min_size_bytes:
+                    from api.models import DocumentSummary
+                    self.stdout.write("    Summarizing...")
+                    summary_text = _asyncio.run(llm.complete(
+                        prompt=f"Stresc ponizszy dokument w 3-5 zdaniach:\n\n{markdown[:8000]}",
+                        system="Jestes asystentem streszczajacym dokumenty. Odpowiadaj po polsku.",
+                    ))
+                    md_name = out.name
+                    DocumentSummary.objects.update_or_create(
+                        workspace_id=workspace_id,
+                        source=md_name,
+                        defaults={"summary": summary_text, "file_size_bytes": file_size_bytes},
+                    )
+                    logger.info("Summary saved — source=%s workspace_id=%s", md_name, workspace_id)
+                    self.stdout.write(self.style.SUCCESS(f"    Summarized  {md_name}"))
 
             except Exception:
                 logger.exception("Pipeline failed for object=%s", object_name)

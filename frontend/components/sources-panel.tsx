@@ -80,39 +80,6 @@ export default function SourcesPanel({ msg, activeCite, setActiveCite, docs, act
           );
         })}
 
-        {activeCitation && doc && (
-          <div className="sp-preview fade-up">
-            <div className="sp-preview-head">
-              <span className="mono" style={{ fontSize: 11, display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Icon.File size={11} /> {doc.name}
-              </span>
-              {doc.objectName && (
-                <button
-                  className="sp-preview-open"
-                  onClick={() => openInPdf(doc.objectName!, activeCitation.passage, activeCitation.page)}
-                  title="Open PDF"
-                >
-                  <Icon.Export size={11} /> Open PDF
-                </button>
-              )}
-            </div>
-            <div className="sp-preview-page">
-              <div className="pdf-line h" />
-              <div className="pdf-line w90" />
-              <div className="pdf-line w95" />
-              <div className="pdf-line w70" />
-              <div className="pdf-block-highlight">
-                <div className="pdf-line on w92" />
-                <div className="pdf-line on w88" />
-                <div className="pdf-line on w50" />
-              </div>
-              <div className="pdf-line w94" />
-              <div className="pdf-line w80" />
-              <div className="pdf-line w90" />
-              <div className="pdf-line w60" />
-            </div>
-          </div>
-        )}
       </div>
 
       <style jsx>{`

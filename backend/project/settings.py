@@ -10,8 +10,12 @@ ALLOWED_HOSTS = ["*"]
 APPEND_SLASH = False
 
 INSTALLED_APPS = [
+    "django.contrib.admin",
     "django.contrib.contenttypes",
     "django.contrib.auth",
+    "django.contrib.sessions",
+    "django.contrib.messages",
+    "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework.authtoken",
     "django_prometheus",
@@ -20,8 +24,27 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django_prometheus.middleware.PrometheusBeforeMiddleware",
+    "django.middleware.security.SecurityMiddleware",
+    "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
+    "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
     "django_prometheus.middleware.PrometheusAfterMiddleware",
+]
+
+TEMPLATES = [
+    {
+        "BACKEND": "django.template.backends.django.DjangoTemplates",
+        "DIRS": [],
+        "APP_DIRS": True,
+        "OPTIONS": {
+            "context_processors": [
+                "django.template.context_processors.request",
+                "django.contrib.auth.context_processors.auth",
+                "django.contrib.messages.context_processors.messages",
+            ],
+        },
+    },
 ]
 
 ROOT_URLCONF = "project.urls"
@@ -59,6 +82,9 @@ REST_FRAMEWORK = {
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 LOGGING = {
     "version": 1,

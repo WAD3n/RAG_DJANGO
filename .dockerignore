@@ -1,0 +1,27 @@
+# Python virtualenv
+venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+
+# Node
+frontend/node_modules/
+frontend/.next/
+frontend/.next/cache/
+
+# Git / IDE
+.git/
+.claude/
+.vscode/
+.idea/
+
+# Dev artefacts
+*.log
+*.tmp
+docs/
+*.html
+
+# Secrets (never in image)
+.env

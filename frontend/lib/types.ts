@@ -25,6 +25,29 @@ export interface ChatMessage {
   content: string;
   citations?: Citation[];
   durationMs?: number;
+  judgeResult?: JudgeResult | null;
+}
+
+export interface Workspace {
+  id: number;
+  name: string;
+  slug: string;
+  created_at: string;
+  member_count: number;
+}
+
+export interface JudgeResult {
+  verdict: 'PASS' | 'WARN' | 'FAIL';
+  score: number;
+  reasoning: string;
+  flags: string[];
+}
+
+export interface DocumentSummaryResponse {
+  source: string;
+  summary: string;
+  file_size_bytes: number;
+  generated_at: string;
 }
 
 export interface Document {
@@ -61,6 +84,7 @@ export interface QueryHit {
 export interface QueryResponse {
   answer: string;
   context: QueryHit[];
+  judge?: JudgeResult | null;
 }
 
 export interface AuthResponse {
@@ -90,5 +114,6 @@ export interface MessageRecord {
   content: string;
   citations: Citation[];
   duration_ms?: number | null;
+  judge_result?: JudgeResult | null;
   created_at: string;
 }

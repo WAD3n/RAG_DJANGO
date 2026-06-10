@@ -102,6 +102,14 @@ class StorageClient:
             ExpiresIn=expires,
         )
 
+    def delete_object(self, object_name: str) -> None:
+        logger.info("Deleting object — key=%s", object_name)
+        try:
+            self._client.delete_object(Bucket=self._bucket, Key=object_name)
+        except Exception:
+            logger.exception("Failed to delete object %s", object_name)
+            raise
+
     def list_objects(self, prefix: str = "") -> list[str]:
         logger.debug("Listing objects — prefix=%r", prefix)
         response = self._client.list_objects_v2(Bucket=self._bucket, Prefix=prefix)

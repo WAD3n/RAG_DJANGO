@@ -2,7 +2,7 @@
 
 import React from 'react';
 import * as Icon from './icons';
-import type { ChatMessage, Citation, Document } from '../lib/types';
+import type { ChatMessage, Citation, Document, JudgeResult } from '../lib/types';
 
 interface MessageProps {
   msg: ChatMessage;
@@ -11,23 +11,89 @@ interface MessageProps {
   setActiveCite: (c: { msgIdx: number; citeId: number }) => void;
   citationStyle: 'numbered' | 'pill' | 'underline';
   docs: Document[];
+  model?: string;
 }
 
-export default function Message({ msg, idx, activeCite, setActiveCite, citationStyle, docs }: MessageProps) {
+function JudgePanel({ judge }: { judge: JudgeResult }) {
+  const [open, setOpen] = React.useState(false);
+  const icon = judge.verdict === 'PASS' ? '✅' : judge.verdict === 'WARN' ? '⚠️' : '❌';
+  const color = judge.verdict === 'PASS' ? 'var(--success)' : judge.verdict === 'WARN' ? '#e8a838' : 'var(--danger)';
+
+  return (
+    <div className="judge-wrap">
+      <button className="judge-badge" onClick={() => setOpen(v => !v)} style={{ '--jc': color } as React.CSSProperties}>
+        <span>{icon}</span>
+        <span className="mono" style={{ fontSize: 11 }}>score {judge.score}/10</span>
+        <span style={{ fontSize: 10, color: 'var(--fg-faint)' }}>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="judge-panel">
+          <div className="judge-row">
+            <span className="judge-label">Verdict</span>
+            <span style={{ color, fontWeight: 600 }}>{judge.verdict}</span>
+          </div>
+          <div className="judge-row">
+            <span className="judge-label">Reasoning</span>
+            <span>{judge.reasoning}</span>
+          </div>
+          {(judge.flags ?? []).length > 0 && (
+            <div className="judge-row">
+              <span className="judge-label">Flags</span>
+              <span>{(judge.flags ?? []).join(', ')}</span>
+            </div>
+          )}
+        </div>
+      )}
+      <style jsx>{`
+        .judge-wrap { margin-top: 8px; }
+        .judge-badge {
+          appearance: none; border: 1px solid var(--border-strong);
+          background: var(--bg-soft); border-radius: 20px;
+          padding: 3px 10px; display: inline-flex; align-items: center; gap: 6px;
+          cursor: default; font: inherit; color: var(--fg);
+          transition: border-color 120ms;
+        }
+        .judge-badge:hover { border-color: var(--jc, var(--accent)); }
+        .judge-panel {
+          margin-top: 6px; padding: 10px 12px;
+          background: var(--bg-elev); border: 1px solid var(--border);
+          border-radius: 8px; display: flex; flex-direction: column; gap: 6px;
+        }
+        .judge-row { display: flex; gap: 10px; font-size: 12.5px; color: var(--fg-muted); }
+        .judge-label { font-weight: 600; color: var(--fg-faint); min-width: 70px; }
+      `}</style>
+    </div>
+  );
+}
+
+export default function Message({ msg, idx, activeCite, setActiveCite, citationStyle, docs, model }: MessageProps) {
   const isUser = msg.role === 'user';
+  const [copied, setCopied] = React.useState(false);
 
   function handleCite(citeId: number) {
     setActiveCite({ msgIdx: idx, citeId });
   }
 
+  function handleViewSources() {
+    const first = msg.citations?.[0];
+    if (first) setActiveCite({ msgIdx: idx, citeId: first.id });
+  }
+
+  function handleCopy() {
+    navigator.clipboard?.writeText(msg.content).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   return (
     <div className={`msg ${isUser ? 'is-user' : 'is-ai'} fade-up`}>
       <div className="msg-avatar">
-        {isUser ? 'Me' : <Icon.Logo size={14} />}
+        {isUser ? 'Me' : <Icon.Sparkle size={14} />}
       </div>
       <div className="msg-body">
         <div className="msg-meta">
-          <span className="msg-role">{isUser ? 'You' : 'RAGFLOW'}</span>
+          <span className="msg-role">{isUser ? 'You' : (model || 'LLM')}</span>
           {!isUser && msg.citations && msg.durationMs && (
             <span className="muted mono" style={{ fontSize: 10.5 }}>
               · {msg.citations.length} sources · {(msg.durationMs / 1000).toFixed(1)}s
@@ -43,12 +109,17 @@ export default function Message({ msg, idx, activeCite, setActiveCite, citationS
           {renderRich(msg.content, msg.citations, citationStyle, handleCite, docs)}
           {!isUser && msg.content && msg.citations && (
             <div className="msg-actions">
-              <button className="msg-act"><Icon.Quote size={11} /> View sources</button>
+              <button className="msg-act" onClick={handleViewSources} disabled={!msg.citations.length}>
+                <Icon.Quote size={11} /> View sources
+              </button>
               <span className="msg-act-sep">·</span>
-              <button className="msg-act" onClick={() => navigator.clipboard?.writeText(msg.content)}>
-                <Icon.Export size={11} /> Copy
+              <button className="msg-act" onClick={handleCopy}>
+                <Icon.Export size={11} /> {copied ? 'Copied!' : 'Copy'}
               </button>
             </div>
+          )}
+          {!isUser && msg.judgeResult && (
+            <JudgePanel judge={msg.judgeResult} />
           )}
         </div>
       </div>

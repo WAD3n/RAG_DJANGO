@@ -85,6 +85,9 @@ class Settings(BaseSettings):
     kafka_topic_file_uploaded: str = "rag.file.uploaded"
     kafka_consumer_group: str = "rag-pipeline"
 
+    # Summarization
+    summary_min_size_bytes: int = 1_048_576  # 1 MB default
+
     def log_summary(self) -> None:
         logger.info(
             "Settings loaded — device=%s ocr=%s llm=%s embed=%s",
