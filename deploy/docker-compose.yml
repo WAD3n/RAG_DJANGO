@@ -92,6 +92,13 @@ services:
       KAFKA_BOOTSTRAP_SERVERS: '["kafka:9092"]'
     volumes:
       - model_cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     depends_on:
       postgres: { condition: service_healthy }
       minio:    { condition: service_healthy }
