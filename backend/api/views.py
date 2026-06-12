@@ -415,8 +415,9 @@ class DocumentDeleteView(APIView):
                 logger.warning("DocumentDeleteView — could not delete original: %s", original_key)
 
         stem = Path(source).stem
+        ws_prefix = str(workspace_id) if workspace_id is not None else "global"
         try:
-            storage.delete_object(f"converted/{stem}.md")
+            storage.delete_object(f"converted/{ws_prefix}/{stem}.md")
         except Exception:
             pass
 

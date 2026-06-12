@@ -45,3 +45,9 @@ Thumbs.db
 # (pliki compose wersjonujemy — ignorujemy tylko lokalne overrides)
 docker-compose.override.yml
 docker-compose.local.yml
+
+# ── Deploy ────────────────────────────────────────────────────────────────────
+# obrazy Docker (duże binarki, nie wersjonujemy)
+deploy/images/
+# lokalne .env z sekretami (szablon .env.example trzymamy w repo)
+deploy/.env

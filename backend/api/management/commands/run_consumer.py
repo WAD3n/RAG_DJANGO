@@ -68,6 +68,9 @@ class Command(BaseCommand):
                 auto_offset_reset="earliest",
                 enable_auto_commit=True,
                 value_deserializer=lambda m: json.loads(m.decode("utf-8")),
+                max_poll_interval_ms=3600000,  # 1h — OCR on CPU can take minutes
+                session_timeout_ms=60000,
+                heartbeat_interval_ms=20000,
             )
         except NoBrokersAvailable:
             logger.error("Cannot connect to Kafka brokers: %s", cfg.kafka_bootstrap_servers)
@@ -110,7 +113,8 @@ class Command(BaseCommand):
                 out = Path(tmp_dir) / f"{file_path.stem}.md"
                 out.write_text(markdown, encoding="utf-8")
 
-                md_key = f"converted/{file_path.stem}.md"
+                ws_prefix = str(workspace_id) if workspace_id is not None else "global"
+                md_key = f"converted/{ws_prefix}/{file_path.stem}.md"
                 storage.upload_bytes(
                     data=markdown.encode("utf-8"),
                     object_name=md_key,

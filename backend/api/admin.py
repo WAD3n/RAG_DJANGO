@@ -1,6 +1,7 @@
-from django.contrib import admin
+from pathlib import Path
+
+from django.contrib import admin, messages as django_messages
 from django.contrib.auth.models import User
-from django.utils.html import format_html
 
 from .models import Conversation, DocumentSummary, Message, Workspace, WorkspaceMembership
 
@@ -44,10 +45,39 @@ class DocumentSummaryAdmin(admin.ModelAdmin):
     list_filter = ['workspace']
     search_fields = ['source']
     readonly_fields = ['generated_at', 'file_size_bytes']
+    actions = ['delete_document_fully']
 
     @admin.display(description='Size')
     def file_size_kb(self, obj):
         return f'{obj.file_size_bytes // 1024} KB'
+
+    @admin.action(description='Delete document fully (chunks + MinIO + summary)')
+    def delete_document_fully(self, request, queryset):
+        from api import services
+        storage = services.get_storage()
+        count = 0
+        for summary in queryset:
+            try:
+                ws_id = summary.workspace_id
+                ws_prefix = str(ws_id) if ws_id is not None else "global"
+                stem = Path(summary.source).stem
+                services.get_vector_store().delete(summary.source, workspace_id=ws_id)
+                for key in storage.list_objects(prefix=f"originals/{ws_prefix}/"):
+                    if Path(key).stem == stem:
+                        try:
+                            storage.delete_object(key)
+                        except Exception:
+                            pass
+                try:
+                    storage.delete_object(f"converted/{ws_prefix}/{stem}.md")
+                except Exception:
+                    pass
+                summary.delete()
+                count += 1
+            except Exception as exc:
+                self.message_user(request, f"Error deleting {summary.source}: {exc}", level=django_messages.ERROR)
+        if count:
+            self.message_user(request, f"Deleted {count} document(s) fully.")
 
 
 class MessageInline(admin.TabularInline):

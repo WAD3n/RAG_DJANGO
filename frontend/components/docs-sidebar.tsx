@@ -198,7 +198,7 @@ function DocItem({
     if (!summary && !loading) {
       setLoading(true);
       try {
-        const s = await onGetSummary(doc.name + '.md');
+        const s = await onGetSummary(doc.id);
         setSummary(s);
       } finally {
         setLoading(false);
