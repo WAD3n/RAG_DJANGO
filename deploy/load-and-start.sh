@@ -21,14 +21,17 @@ else
   echo "[2/3] .env found."
 fi
 
+# SSL + basic auth
+echo "[3/4] Setting up SSL and basic auth..."
+bash "$SCRIPT_DIR/setup-ssl.sh"
+
 # Start
-echo "[3/3] Starting services..."
+echo "[4/4] Starting services..."
 docker compose -f "$SCRIPT_DIR/docker-compose.yml" up -d
 
 echo ""
 echo "Services:"
-echo "  Frontend:      http://localhost:3000"
-echo "  API:           http://localhost:8000"
+echo "  Frontend:      https://localhost"
 echo "  MinIO console: http://localhost:9001  (minioadmin / minioadmin)"
 echo ""
 echo "Logs: docker compose -f $SCRIPT_DIR/docker-compose.yml logs -f"

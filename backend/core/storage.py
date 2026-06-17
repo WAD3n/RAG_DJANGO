@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 class StorageClient:
     def __init__(self, settings: Settings) -> None:
         self._bucket = settings.minio_bucket
+        self._public_endpoint = settings.minio_public_endpoint or settings.minio_endpoint
         logger.info(
             "Connecting to MinIO — endpoint=%s bucket=%s",
             settings.minio_endpoint,
@@ -34,6 +35,13 @@ class StorageClient:
             aws_secret_access_key=settings.minio_secret_key,
             config=Config(signature_version="s3v4"),
         )
+        self._public_client = boto3.client(
+            "s3",
+            endpoint_url=self._public_endpoint,
+            aws_access_key_id=settings.minio_access_key,
+            aws_secret_access_key=settings.minio_secret_key,
+            config=Config(signature_version="s3v4"),
+        ) if self._public_endpoint != settings.minio_endpoint else self._client
         self._ensure_bucket()
 
     def _ensure_bucket(self) -> None:
@@ -96,7 +104,7 @@ class StorageClient:
 
     def presigned_url(self, object_name: str, expires: int = 3600) -> str:
         logger.debug("Generating presigned URL — key=%s expires=%ds", object_name, expires)
-        return self._client.generate_presigned_url(
+        return self._public_client.generate_presigned_url(
             "get_object",
             Params={"Bucket": self._bucket, "Key": object_name},
             ExpiresIn=expires,

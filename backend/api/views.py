@@ -281,25 +281,36 @@ class QueryView(APIView):
 
 
 class PdfViewView(APIView):
-    """GET /api/pdf/view?key=originals/... — serve original file inline for browser PDF viewer."""
+    """GET /api/pdf/view?key=originals/...&_token=<tok> — redirect to presigned MinIO URL.
+
+    Authentication via _token query param because this endpoint is opened in a new browser
+    tab (window.open), where custom headers cannot be sent.
+    """
+
+    authentication_classes = []
+    permission_classes = []
 
     def get(self, request):
-        import mimetypes
-        from django.http import HttpResponse
+        from django.http import HttpResponseRedirect
+
+        # Authenticate via URL param
+        raw_token = request.query_params.get("_token", "")
+        try:
+            token_obj = Token.objects.get(key=raw_token)
+        except Token.DoesNotExist:
+            return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
 
         key = request.query_params.get("key", "")
         if not key.startswith("originals/"):
             return Response({"error": "Invalid key"}, status=status.HTTP_400_BAD_REQUEST)
+
         try:
-            data = services.get_storage().download_bytes(key)
+            url = services.get_storage().presigned_url(key, expires=300)
         except Exception:
-            logger.exception("PdfViewView — not found: %s", key)
+            logger.exception("PdfViewView — presigned URL failed: %s", key)
             return Response({"error": "File not found"}, status=status.HTTP_404_NOT_FOUND)
 
-        content_type, _ = mimetypes.guess_type(key)
-        response = HttpResponse(data, content_type=content_type or "application/octet-stream")
-        response["Content-Disposition"] = f'inline; filename="{Path(key).name}"'
-        return response
+        return HttpResponseRedirect(url)
 
 
 class DocumentSummaryView(APIView):

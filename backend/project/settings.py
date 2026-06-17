@@ -9,6 +9,9 @@ DEBUG = os.environ.get("DEBUG", "true").lower() == "true"
 ALLOWED_HOSTS = ["*"]
 APPEND_SLASH = False
 
+_csrf_origins = os.environ.get("CSRF_TRUSTED_ORIGINS", "")
+CSRF_TRUSTED_ORIGINS = [o.strip() for o in _csrf_origins.split(",") if o.strip()]
+
 INSTALLED_APPS = [
     "django.contrib.admin",
     "django.contrib.contenttypes",
@@ -79,6 +82,7 @@ REST_FRAMEWORK = {
     ],
     "DEFAULT_AUTHENTICATION_CLASSES": ["rest_framework.authentication.TokenAuthentication"],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "EXCEPTION_HANDLER": "project.exception_handler.no_www_authenticate_handler",
 }
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

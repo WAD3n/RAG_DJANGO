@@ -61,13 +61,27 @@ services:
     restart: unless-stopped
     networks: [ragdla]
 
+  # ── Reverse proxy ─────────────────────────────────────────────────────────
+
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+      - ./nginx.htpasswd:/etc/nginx/htpasswd:ro
+    depends_on:
+      - api
+      - frontend
+    restart: unless-stopped
+    networks: [ragdla]
+
   # ── Backend ───────────────────────────────────────────────────────────────
 
   api:
     image: ragdla/backend:latest
     command: python manage.py runserver 0.0.0.0:8000
-    ports:
-      - "8000:8000"
     env_file: .env
     environment:
       PG_DSN: postgresql://ragdocs:ragdocs@postgres:5432/ragdocs
@@ -110,8 +124,6 @@ services:
 
   frontend:
     image: ragdla/frontend:latest
-    ports:
-      - "3000:3000"
     environment:
       BACKEND_URL: http://api:8000
     depends_on:
