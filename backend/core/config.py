@@ -76,7 +76,7 @@ class Settings(BaseSettings):
 
     # MinIO / S3
     minio_endpoint: str = "http://localhost:9000"
-    minio_public_endpoint: str = ""  # publiczny URL do presigned URL (np. http://1.2.3.4:9000); jeśli puste używa minio_endpoint
+    minio_public_endpoint: str = ""  # public URL for presigned URLs (e.g. http://1.2.3.4:9000); falls back to minio_endpoint if empty
     minio_access_key: str = "minioadmin"
     minio_secret_key: str = "minioadmin"
     minio_bucket: str = "ragdocs"

@@ -25,14 +25,14 @@ frontend/out/
 frontend/.env.local
 frontend/.env.*.local
 
-# ── Środowisko / sekrety ──────────────────────────────────────────────────────
+# ── Environment / secrets ─────────────────────────────────────────────────────
 .env
-# .env.example  ← trzymamy w repo jako szablon
+# .env.example  ← kept in repo as a template
 
-# ── Dane projektu (nie wersjonujemy danych) ───────────────────────────────────
+# ── Project data (data is not version-controlled) ─────────────────────────────
 ConvertedFiles/
 
-# ── IDE / narzędzia ───────────────────────────────────────────────────────────
+# ── IDE / tools ───────────────────────────────────────────────────────────────
 .vscode/
 .idea/
 .claude/
@@ -42,15 +42,15 @@ ConvertedFiles/
 Thumbs.db
 
 # ── Docker ────────────────────────────────────────────────────────────────────
-# (pliki compose wersjonujemy — ignorujemy tylko lokalne overrides)
+# (compose files are version-controlled — only local overrides are ignored)
 docker-compose.override.yml
 docker-compose.local.yml
 
 # ── Deploy ────────────────────────────────────────────────────────────────────
-# obrazy Docker (duże binarki, nie wersjonujemy)
+# Docker images (large binaries, not version-controlled)
 deploy/images/
-# lokalne .env z sekretami (szablon .env.example trzymamy w repo)
+# local .env with secrets (the .env.example template is kept in repo)
 deploy/.env
-# TLS cert + basic auth (generowane lokalnie na serwerze)
+# TLS cert + basic auth (generated locally on the server)
 deploy/certs/
 deploy/nginx.htpasswd

@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>RAG — Przepływ Procesu</title>
+<title>RAG — Process Flow</title>
 <style>
 * { margin: 0; padding: 0; }
 body { background: #08111e; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
@@ -67,7 +67,7 @@ body { background: #08111e; display: flex; justify-content: center; align-items:
 <!-- Title -->
 <text x="640" y="52" text-anchor="middle"
       fill="white" font-size="34" font-weight="700" letter-spacing="0.3">
-  RAG dla dokumentów — Przepływ Procesu
+  RAG for Documents — Process Flow
 </text>
 
 <!-- ═══════════════════════════════════
@@ -116,16 +116,16 @@ body { background: #08111e; display: flex; justify-content: center; align-items:
 <text x="640" y="236" text-anchor="middle"
       fill="#1a2d50" font-size="24" font-weight="800" letter-spacing="1.5">RAG</text>
 <text x="640" y="268" text-anchor="middle"
-      fill="#1a2d50" font-size="24" font-weight="800" letter-spacing="1.5">DLA</text>
+      fill="#1a2d50" font-size="24" font-weight="800" letter-spacing="1.5">FOR</text>
 <text x="640" y="300" text-anchor="middle"
-      fill="#1a2d50" font-size="24" font-weight="800" letter-spacing="1.5">DOKUMENTÓW</text>
+      fill="#1a2d50" font-size="24" font-weight="800" letter-spacing="1.5">DOCUMENTS</text>
 <!-- connector dots (decorative) -->
 <circle cx="543" cy="270" r="5" fill="#2a4a88" opacity="0.6"/>
 <circle cx="738" cy="270" r="5" fill="#2a4a88" opacity="0.6"/>
 <circle cx="640" cy="367" r="5" fill="#2a4a88" opacity="0.4"/>
 
 <!-- ═══════════════════════════════════
-     STEP 1 — WGRAJ PDF
+     STEP 1 — UPLOAD PDF
      box center: (175, 268)
 ═══════════════════════════════════ -->
 <rect x="133" y="228" width="92" height="92" rx="16" fill="#c87010" opacity="0.4"/>
@@ -143,13 +143,13 @@ body { background: #08111e; display: flex; justify-content: center; align-items:
             stroke-linejoin="round" stroke-linecap="round"/>
 </g>
 <text x="175" y="336" text-anchor="middle"
-      fill="#f59e0b" font-size="12.5" font-weight="800" letter-spacing="1.5">WGRAJ PDF</text>
-<text x="175" y="353" text-anchor="middle" fill="#94a3b8" font-size="10.5">Użytkownik przesyła</text>
-<text x="175" y="368" text-anchor="middle" fill="#94a3b8" font-size="10.5">dokument PDF przez</text>
-<text x="175" y="383" text-anchor="middle" fill="#94a3b8" font-size="10.5">interfejs webowy</text>
+      fill="#f59e0b" font-size="12.5" font-weight="800" letter-spacing="1.5">UPLOAD PDF</text>
+<text x="175" y="353" text-anchor="middle" fill="#94a3b8" font-size="10.5">User uploads a</text>
+<text x="175" y="368" text-anchor="middle" fill="#94a3b8" font-size="10.5">PDF document via</text>
+<text x="175" y="383" text-anchor="middle" fill="#94a3b8" font-size="10.5">the web interface</text>
 
 <!-- ═══════════════════════════════════
-     STEP 2 — OCR & KONWERSJA
+     STEP 2 — OCR & CONVERSION
      box center: (340, 458)
 ═══════════════════════════════════ -->
 <rect x="298" y="418" width="92" height="92" rx="16" fill="#a07808" opacity="0.4"/>
@@ -167,10 +167,10 @@ body { background: #08111e; display: flex; justify-content: center; align-items:
   <circle cx="3" cy="-3" r="2" fill="white" opacity="0.5"/>
 </g>
 <text x="340" y="526" text-anchor="middle"
-      fill="#fbbf24" font-size="12.5" font-weight="800" letter-spacing="1.5">OCR &amp; KONWERSJA</text>
+      fill="#fbbf24" font-size="12.5" font-weight="800" letter-spacing="1.5">OCR &amp; CONVERSION</text>
 <text x="340" y="543" text-anchor="middle" fill="#94a3b8" font-size="10.5">docling + EasyOCR</text>
-<text x="340" y="558" text-anchor="middle" fill="#94a3b8" font-size="10.5">przetwarza strony PDF</text>
-<text x="340" y="573" text-anchor="middle" fill="#94a3b8" font-size="10.5">i wyodrębnia tekst</text>
+<text x="340" y="558" text-anchor="middle" fill="#94a3b8" font-size="10.5">processes PDF pages</text>
+<text x="340" y="573" text-anchor="middle" fill="#94a3b8" font-size="10.5">and extracts text</text>
 
 <!-- ═══════════════════════════════════
      STEP 3 — CHUNKING & EMBEDDING
@@ -194,12 +194,12 @@ body { background: #08111e; display: flex; justify-content: center; align-items:
 </g>
 <text x="640" y="595" text-anchor="middle"
       fill="#60a5fa" font-size="12.5" font-weight="800" letter-spacing="1.5">CHUNKING &amp; EMBEDDING</text>
-<text x="640" y="612" text-anchor="middle" fill="#94a3b8" font-size="10.5">Podział tekstu na fragmenty</text>
-<text x="640" y="627" text-anchor="middle" fill="#94a3b8" font-size="10.5">+ wektory 1024-dim</text>
+<text x="640" y="612" text-anchor="middle" fill="#94a3b8" font-size="10.5">Splits text into chunks</text>
+<text x="640" y="627" text-anchor="middle" fill="#94a3b8" font-size="10.5">+ 1024-dim vectors</text>
 <text x="640" y="642" text-anchor="middle" fill="#94a3b8" font-size="10.5">(mmlw-retrieval-roberta-large)</text>
 
 <!-- ═══════════════════════════════════
-     STEP 4 — WYSZUKIWANIE
+     STEP 4 — RETRIEVAL
      box center: (940, 458)
 ═══════════════════════════════════ -->
 <rect x="898" y="418" width="92" height="92" rx="16" fill="#a01028" opacity="0.4"/>
@@ -213,13 +213,13 @@ body { background: #08111e; display: flex; justify-content: center; align-items:
   <line x1="20" y1="20" x2="28" y2="28" stroke="#d02850" stroke-width="3.5" stroke-linecap="round"/>
 </g>
 <text x="940" y="526" text-anchor="middle"
-      fill="#f87171" font-size="12.5" font-weight="800" letter-spacing="1.5">WYSZUKIWANIE</text>
+      fill="#f87171" font-size="12.5" font-weight="800" letter-spacing="1.5">RETRIEVAL</text>
 <text x="940" y="543" text-anchor="middle" fill="#94a3b8" font-size="10.5">pgvector cosine similarity</text>
-<text x="940" y="558" text-anchor="middle" fill="#94a3b8" font-size="10.5">zwraca top-k pasujących</text>
-<text x="940" y="573" text-anchor="middle" fill="#94a3b8" font-size="10.5">fragmentów dokumentu</text>
+<text x="940" y="558" text-anchor="middle" fill="#94a3b8" font-size="10.5">returns the top-k matching</text>
+<text x="940" y="573" text-anchor="middle" fill="#94a3b8" font-size="10.5">document chunks</text>
 
 <!-- ═══════════════════════════════════
-     STEP 5 — GENEROWANIE
+     STEP 5 — GENERATION
      box center: (1105, 268)
 ═══════════════════════════════════ -->
 <rect x="1063" y="228" width="92" height="92" rx="16" fill="#087860" opacity="0.4"/>
@@ -234,10 +234,10 @@ body { background: #08111e; display: flex; justify-content: center; align-items:
         stroke-linejoin="round" stroke-linecap="round"/>
 </g>
 <text x="1105" y="336" text-anchor="middle"
-      fill="#2dd4bf" font-size="12.5" font-weight="800" letter-spacing="1.5">GENEROWANIE</text>
-<text x="1105" y="353" text-anchor="middle" fill="#94a3b8" font-size="10.5">Qwen2.5-1.5B generuje</text>
-<text x="1105" y="368" text-anchor="middle" fill="#94a3b8" font-size="10.5">odpowiedź na podstawie</text>
-<text x="1105" y="383" text-anchor="middle" fill="#94a3b8" font-size="10.5">kontekstu z dokumentu</text>
+      fill="#2dd4bf" font-size="12.5" font-weight="800" letter-spacing="1.5">GENERATION</text>
+<text x="1105" y="353" text-anchor="middle" fill="#94a3b8" font-size="10.5">Qwen2.5-1.5B generates</text>
+<text x="1105" y="368" text-anchor="middle" fill="#94a3b8" font-size="10.5">an answer based on</text>
+<text x="1105" y="383" text-anchor="middle" fill="#94a3b8" font-size="10.5">document context</text>
 
 </svg>
 </body>

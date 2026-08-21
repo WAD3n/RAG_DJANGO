@@ -2,8 +2,8 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'RAG dla dokumentów',
-  description: 'Indeksuj dokumenty i odpytuj je przy użyciu modelu językowego.',
+  title: 'RAG for Documents',
+  description: 'Index documents and query them using a language model.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

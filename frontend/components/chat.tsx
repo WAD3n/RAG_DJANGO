@@ -28,10 +28,10 @@ interface ChatProps {
 }
 
 const SUGGESTIONS = [
-  'Podsumuj główne punkty',
-  'Jakie są kluczowe wnioski?',
-  'Wyjaśnij szczegółowo',
-  'Porównaj dokumenty',
+  'Summarize the main points',
+  'What are the key takeaways?',
+  'Explain in detail',
+  'Compare the documents',
 ];
 
 function makeConv(title = 'New conversation'): Conversation {

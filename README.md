@@ -1,13 +1,13 @@
-# RAG dla Dokumentów
+# RAG for Documents
 
-System do indeksowania i odpytywania dokumentów (PDF, DOCX, XLSX, PPTX) przy użyciu lokalnego modelu językowego i bazy wektorowej pgvector. Obsługuje wielu użytkowników z logowaniem, historią konwersacji i podglądem cytowanych fragmentów.
+A system for indexing and querying documents (PDF, DOCX, XLSX, PPTX) using a local language model and a pgvector vector store. Supports multiple users with login, conversation history, and preview of cited fragments.
 
 ---
 
-## Architektura
+## Architecture
 
 ```
-                        PRZEGLĄDARKA
+                        BROWSER
                    http://localhost:3000
                            │
                            │ HTTP
@@ -50,212 +50,212 @@ System do indeksowania i odpytywania dokumentów (PDF, DOCX, XLSX, PPTX) przy u�
 
 ---
 
-## Komponenty
+## Components
 
 ### Frontend — Next.js 14
 
-- **Ekran logowania** — Token authentication (JWT-less, Django Token), dane trzymane w `localStorage`.
-- **Upload dokumentów** — Drag & drop, progress bar dla każdego etapu (upload → convert → ingest).
-- **Chat z dokumentami** — Historia konwersacji przypisana do użytkownika, lazy loading wiadomości przy przełączaniu. Wybór modelu LLM z dropdownu obok przycisku "Ask".
-- **Panel źródeł** — Cytowane fragmenty z oceną podobieństwa, przycisk "Open in PDF" otwierający dokument na właściwej stronie (`#page=N`).
-- **Sidebar** — Lista dokumentów z filtrem, lista konwersacji z rename/delete.
-- Wszystkie wywołania `/api/*` są transparentnie proxowane do backendu przez custom route handler (`app/api/[...path]/route.ts`) z timeoutami (convert: 10 min, ingest: 5 min, query: 2 min).
+- **Login screen** — Token authentication (JWT-less, Django Token), data kept in `localStorage`.
+- **Document upload** — Drag & drop, progress bar for each stage (upload → convert → ingest).
+- **Chat with documents** — Conversation history assigned to the user, lazy loading of messages when switching. LLM model selection from a dropdown next to the "Ask" button.
+- **Sources panel** — Cited fragments with a similarity score, "Open in PDF" button that opens the document at the correct page (`#page=N`).
+- **Sidebar** — List of documents with a filter, list of conversations with rename/delete.
+- All `/api/*` calls are transparently proxied to the backend through a custom route handler (`app/api/[...path]/route.ts`) with timeouts (convert: 10 min, ingest: 5 min, query: 2 min).
 
 ### Backend API — Django + Django REST Framework
 
-Serwer HTTP na porcie 8000. Wszystkie endpointy (poza `/api/auth/login`) wymagają nagłówka `Authorization: Token <token>`.
+HTTP server on port 8000. All endpoints (except `/api/auth/login`) require an `Authorization: Token <token>` header.
 
-| Endpoint | Metoda | Działanie |
+| Endpoint | Method | Action |
 |---|---|---|
-| `/api/auth/login` | POST | Zwraca token dla podanych `username`/`password` |
-| `/api/auth/logout` | POST | Unieważnia token |
-| `/api/upload` | POST | Przyjmuje plik, zapisuje w MinIO `originals/<nazwa>`, publikuje do Kafki |
-| `/api/convert` | POST | Pobiera plik z MinIO, konwertuje do Markdown (docling + OCR/VLM), zapisuje `converted/<stem>.md` |
-| `/api/ingest` | POST | Pobiera Markdown z MinIO, chunkuje, embedduje, zapisuje do pgvector |
-| `/api/query` | POST | Wyszukiwanie wektorowe + generowanie odpowiedzi przez LLM |
-| `/api/documents` | GET | Lista zaindeksowanych dokumentów z liczbą chunków |
-| `/api/models` | GET | Dostępne modele LLM i aktywny backend |
-| `/api/stats` | GET | Łączna liczba chunków i źródeł |
-| `/api/pdf/view` | GET | Serwuje oryginalny plik inline (dla przeglądarki PDF) |
-| `/api/storage` | GET | Lista obiektów w MinIO |
-| `/api/conversations` | GET / POST | Lista konwersacji użytkownika / tworzenie nowej |
-| `/api/conversations/{id}` | PATCH / DELETE | Zmiana tytułu / usunięcie konwersacji |
-| `/api/conversations/{id}/messages` | GET / POST | Historia wiadomości / zapis nowych |
+| `/api/auth/login` | POST | Returns a token for the given `username`/`password` |
+| `/api/auth/logout` | POST | Invalidates the token |
+| `/api/upload` | POST | Accepts a file, saves it in MinIO `originals/<name>`, publishes to Kafka |
+| `/api/convert` | POST | Fetches the file from MinIO, converts it to Markdown (docling + OCR/VLM), saves `converted/<stem>.md` |
+| `/api/ingest` | POST | Fetches Markdown from MinIO, chunks it, embeds it, saves it to pgvector |
+| `/api/query` | POST | Vector search + answer generation by the LLM |
+| `/api/documents` | GET | List of indexed documents with chunk counts |
+| `/api/models` | GET | Available LLM models and the active backend |
+| `/api/stats` | GET | Total number of chunks and sources |
+| `/api/pdf/view` | GET | Serves the original file inline (for the PDF viewer) |
+| `/api/storage` | GET | List of objects in MinIO |
+| `/api/conversations` | GET / POST | List of the user's conversations / create a new one |
+| `/api/conversations/{id}` | PATCH / DELETE | Rename / delete a conversation |
+| `/api/conversations/{id}/messages` | GET / POST | Message history / save new messages |
 
-Wszystkie zasoby (model embeddingowy, LLM, klient MinIO) są ładowane raz przy starcie Django (`AppConfig.ready()`) i przechowywane jako singletony (`api/services.py`). Django ORM (auth, tokeny, historia chatów) korzysta z tego samego PostgreSQL co pgvector.
+All resources (embedding model, LLM, MinIO client) are loaded once when Django starts (`AppConfig.ready()`) and kept as singletons (`api/services.py`). The Django ORM (auth, tokens, chat history) uses the same PostgreSQL instance as pgvector.
 
 ### Kafka Consumer — Django management command
 
-Osobny proces (`python manage.py run_consumer`) nasłuchujący na topicu `rag.file.uploaded`.
+A separate process (`python manage.py run_consumer`) listening on the `rag.file.uploaded` topic.
 
-Dla każdej wiadomości wykonuje pełny pipeline:
-1. Pobiera oryginalny plik z MinIO → temp dir
-2. Konwertuje do Markdown (docling + EasyOCR / Tesseract)
-3. Uploaduje Markdown do MinIO (`converted/<stem>.md`)
-4. Chunkuje, embedduje i zapisuje do pgvector
-5. Usuwa temp dir
+For each message it runs the full pipeline:
+1. Fetches the original file from MinIO → temp dir
+2. Converts it to Markdown (docling + EasyOCR / Tesseract)
+3. Uploads the Markdown to MinIO (`converted/<stem>.md`)
+4. Chunks it, embeds it, and saves it to pgvector
+5. Removes the temp dir
 
 ### PostgreSQL + pgvector
 
-Jedna baza danych dla całego systemu — zarówno dane aplikacji (Django ORM) jak i wektory embeddingowe (psycopg2 + pgvector).
+One database for the whole system — both application data (Django ORM) and embedding vectors (psycopg2 + pgvector).
 
-Tabela `chunks`:
+`chunks` table:
 ```sql
 id           TEXT PRIMARY KEY   -- "<stem>::<chunk_index>"
-source       TEXT               -- nazwa pliku źródłowego (.md)
-heading      TEXT               -- nagłówek sekcji
+source       TEXT               -- source file name (.md)
+heading      TEXT               -- section heading
 chunk_index  INTEGER
-page_no      INTEGER            -- numer strony w oryginalnym dokumencie
-content      TEXT               -- treść chunka
-embedding    vector(N)          -- N=1024 (mmlw-roberta) lub N=768 (nomic-embed-text-v1.5)
+page_no      INTEGER            -- page number in the original document
+content      TEXT               -- chunk content
+embedding    vector(N)          -- N=1024 (mmlw-roberta) or N=768 (nomic-embed-text-v1.5)
 ```
-> Wymiar N jest ustawiany automatycznie przy starcie na podstawie modelu embeddingowego. Zmiana modelu powoduje usunięcie i odtworzenie tabeli — wymagane ponowne indeksowanie dokumentów.
-Indeks HNSW (`vector_cosine_ops`) przyspiesza wyszukiwanie podobieństwa.
+> Dimension N is set automatically at startup based on the embedding model. Changing the model drops and recreates the table — documents must be re-indexed.
+The HNSW index (`vector_cosine_ops`) speeds up similarity search.
 
-Tabele Django ORM: `auth_user`, `authtoken_token`, `api_conversation`, `api_message`.
+Django ORM tables: `auth_user`, `authtoken_token`, `api_conversation`, `api_message`.
 
 ### MinIO
 
-Kompatybilny z S3 object storage. Przechowuje:
-- `originals/<nazwa>` — oryginalne pliki wgrane przez użytkownika
-- `converted/<stem>.md` — wyeksportowane pliki Markdown
+S3-compatible object storage. Stores:
+- `originals/<name>` — original files uploaded by the user
+- `converted/<stem>.md` — exported Markdown files
 
-Konsola webowa dostępna na porcie 9001 (`minioadmin` / `minioadmin`).
+Web console available on port 9001 (`minioadmin` / `minioadmin`).
 
-### Kafka (KRaft — bez Zookeepera)
+### Kafka (KRaft — without Zookeeper)
 
-Broker wiadomości do asynchronicznej komunikacji między API a konsumerem.
+Message broker for asynchronous communication between the API and the consumer.
 - Internal (Docker): `kafka:9092`
 - External (host): `localhost:9094`
 - Topic: `rag.file.uploaded`
 
 ---
 
-## Przepływ danych
+## Data flow
 
-### Upload i indeksowanie dokumentu
+### Document upload and indexing
 
 ```
-Użytkownik
+User
   │
   ├─[1]─► POST /api/upload
-  │           └─► MinIO: originals/plik.pdf
+  │           └─► MinIO: originals/file.pdf
   │           └─► Kafka: { object_name, filename }
   │
   ├─[2]─► POST /api/convert  { object_name }
-  │           └─► MinIO: pobierz originals/plik.pdf → temp
-  │           └─► docling: PDF → Markdown (z znacznikami stron \f)
-  │           └─► MinIO: converted/plik.md
-  │           └─► odpowiedź: { minio_key: "converted/plik.md" }
+  │           └─► MinIO: fetch originals/file.pdf → temp
+  │           └─► docling: PDF → Markdown (with page markers \f)
+  │           └─► MinIO: converted/file.md
+  │           └─► response: { minio_key: "converted/file.md" }
   │
   └─[3]─► POST /api/ingest  { minio_key }
-              └─► MinIO: pobierz converted/plik.md → temp
-              └─► chunker: Markdown → N chunków po ~400 słów (śledzi page_no)
+              └─► MinIO: fetch converted/file.md → temp
+              └─► chunker: Markdown → N chunks of ~400 words (tracks page_no)
               └─► embedder: encode("Ustep: " / "search_document: " + chunk)
-              │           (lokalnie: SentenceTransformer / zdalnie: API)
+              │           (locally: SentenceTransformer / remotely: API)
               └─► pgvector: INSERT INTO chunks VALUES (...)
-              └─► odpowiedź: { chunks: N }
+              └─► response: { chunks: N }
 
-Równolegle (asynchronicznie przez Kafka):
-  Kafka Consumer wykonuje ten sam pipeline automatycznie.
+In parallel (asynchronously via Kafka):
+  The Kafka Consumer runs the same pipeline automatically.
 ```
 
-### Zapytanie do dokumentów (RAG)
+### Document query (RAG)
 
 ```
-Użytkownik wpisuje pytanie
+User types a question
   │
   └─► POST /api/query  { question }
           │
-          ├─[1] embed("Zapytanie: " + pytanie) → wektor zapytania
-          │       (lokalnie: mmlw-roberta / zdalnie: nomic-embed przez API)
+          ├─[1] embed("Zapytanie: " + question) → query vector
+          │       (locally: mmlw-roberta / remotely: nomic-embed via API)
           │
           ├─[2] SELECT content, source, heading, page_no,
           │           1-(embedding<=>q) AS score
           │     FROM chunks ORDER BY embedding<=>q LIMIT 5
           │
-          ├─[3] Buduj prompt:
+          ├─[3] Build prompt:
           │       "Context fragments:\n\n[chunk1]\n---\n[chunk2]...\n\nQuestion: ..."
           │
-          └─[4] LLM.complete(prompt) → odpowiedź + cytaty z page_no
+          └─[4] LLM.complete(prompt) → answer + citations with page_no
 ```
 
-### Model embeddingowy
+### Embedding model
 
-Dwa tryby — wybór przez `REMOTE_EMBED_BASE_URL` w `.env`:
+Two modes — selected via `REMOTE_EMBED_BASE_URL` in `.env`:
 
-**Lokalny (domyślny):** `sdadas/mmlw-retrieval-roberta-large` (1024 dim)
-- Asymetryczne wyszukiwanie dla języka polskiego
-- Zapytanie: prefix `"Zapytanie: "` · Fragment: prefix `"Ustep: "`
+**Local (default):** `sdadas/mmlw-retrieval-roberta-large` (1024 dim)
+- Asymmetric retrieval for Polish
+- Query: prefix `"Zapytanie: "` · Passage: prefix `"Ustep: "`
 
-**Zdalny (OpenAI-compatible API):** np. `nomic-ai/nomic-embed-text-v1.5` (768 dim) przez vLLM
-- Zapytanie: prefix `"search_query: "` · Fragment: prefix `"search_document: "`
-- Teksty obcinane do 4000 znaków przed wysłaniem (limit 2048 tokenów modelu)
+**Remote (OpenAI-compatible API):** e.g. `nomic-ai/nomic-embed-text-v1.5` (768 dim) via vLLM
+- Query: prefix `"search_query: "` · Passage: prefix `"search_document: "`
+- Texts truncated to 4000 characters before sending (model limit of 2048 tokens)
 
 ---
 
-## Uruchomienie
+## Running
 
-### Wymagania
+### Requirements
 
-**Docker (zalecane):**
-- Docker Desktop z obsługą GPU (`nvidia-container-toolkit`)
-- NVIDIA GPU z CUDA 12.4
+**Docker (recommended):**
+- Docker Desktop with GPU support (`nvidia-container-toolkit`)
+- NVIDIA GPU with CUDA 12.4
 
-**Natywne (Windows):**
+**Native (Windows):**
 - Python 3.11, Node.js 22
-- CUDA 12.4 + sterowniki NVIDIA
-- Docker Desktop (do infrastruktury: PostgreSQL, MinIO, Kafka)
+- CUDA 12.4 + NVIDIA drivers
+- Docker Desktop (for infrastructure: PostgreSQL, MinIO, Kafka)
 
 ---
 
-### Docker — uruchomienie jednym skryptem
+### Docker — single-script startup
 
 ```powershell
-# Pierwsze uruchomienie (buduje obrazy + tworzy konto użytkownika)
+# First run (builds images + creates a user account)
 .\start.ps1 -Build -CreateUser
 
-# Kolejne uruchomienia
+# Subsequent runs
 .\start.ps1
 
-# Zatrzymanie wszystkiego
+# Stop everything
 .\start.ps1 -Down
 ```
 
-Po uruchomieniu:
+After startup:
 - Frontend: http://localhost:3000
 - Backend API: http://localhost:8000/api/
 - MinIO Console: http://localhost:9001 `minioadmin / minioadmin`
 
-Ręczne tworzenie konta (jeśli pominięto `-CreateUser`):
+Manual account creation (if `-CreateUser` was skipped):
 ```powershell
 docker compose -f backend\docker-compose.yml exec api python manage.py createsuperuser
 ```
 
 ---
 
-### Docker — uruchomienie ręczne (krok po kroku)
+### Docker — manual startup (step by step)
 
 ```powershell
-# 1. Infrastruktura (PostgreSQL, MinIO, Kafka) — tworzy sieć "ragdla"
+# 1. Infrastructure (PostgreSQL, MinIO, Kafka) — creates the network "ragdla"
 docker compose up -d
 
 # 2. Backend — Django API + Kafka Consumer
-#    Entrypoint czeka na postgres/minio/kafka, uruchamia migrate, startuje serwis
+#    The entrypoint waits for postgres/minio/kafka, runs migrate, starts the service
 docker compose -f backend\docker-compose.yml up -d --build
 
-# 3. Utwórz pierwsze konto
+# 3. Create the first account
 docker compose -f backend\docker-compose.yml exec api python manage.py createsuperuser
 
 # 4. Frontend — Next.js
 docker compose -f frontend\docker-compose.yml up -d --build
 
-# Logi
+# Logs
 docker compose -f backend\docker-compose.yml logs -f api
 docker compose -f backend\docker-compose.yml logs -f consumer
 docker compose -f frontend\docker-compose.yml logs -f
 
-# Zatrzymanie
+# Stop
 docker compose -f frontend\docker-compose.yml down
 docker compose -f backend\docker-compose.yml down
 docker compose down
@@ -263,9 +263,9 @@ docker compose down
 
 ---
 
-### Natywne uruchomienie (Windows)
+### Native startup (Windows)
 
-#### Infrastruktura
+#### Infrastructure
 ```powershell
 docker compose up -d
 ```
@@ -274,8 +274,8 @@ docker compose up -d
 ```powershell
 .\venv\Scripts\Activate.ps1
 cd backend
-python manage.py migrate      # tylko przy pierwszym uruchomieniu
-python manage.py createsuperuser  # tylko przy pierwszym uruchomieniu
+python manage.py migrate      # first run only
+python manage.py createsuperuser  # first run only
 python manage.py runserver --noreload 8000
 ```
 
@@ -289,36 +289,36 @@ python manage.py run_consumer
 #### Frontend (terminal 3)
 ```powershell
 cd frontend
-npm install    # tylko przy pierwszym uruchomieniu
+npm install    # first run only
 npm run dev    # → http://localhost:3000
 ```
 
-#### CLI — konwersja i indeksowanie z linii poleceń
+#### CLI — conversion and indexing from the command line
 ```powershell
 .\venv\Scripts\Activate.ps1
 cd backend
 
-# Konwersja dokumentu do Markdown
-python main.py convert ..\dokument.pdf
+# Convert a document to Markdown
+python main.py convert ..\document.pdf
 
-# Konwersja + zapis do pliku
-python main.py convert ..\dokument.pdf --output output.md
+# Convert + save to a file
+python main.py convert ..\document.pdf --output output.md
 
-# Indeksowanie pliku Markdown
+# Index a Markdown file
 python main.py ingest output.md
 
-# Zapytanie do zaindeksowanych dokumentów
-python main.py query "Jaki jest całkowity koszt?"
+# Query the indexed documents
+python main.py query "What is the total cost?"
 
-# Statystyki bazy wektorowej
+# Vector store statistics
 python main.py store-stats
 ```
 
 ---
 
-### Konfiguracja środowiska (`.env`)
+### Environment configuration (`.env`)
 
-Plik `.env` w katalogu głównym projektu. Wartości domyślne wystarczają dla lokalnego dev przy uruchomionej infrastrukturze Docker:
+The `.env` file lives in the project root. The default values are sufficient for local dev with the Docker infrastructure running:
 
 ```env
 DEVICE=auto
@@ -328,10 +328,10 @@ OCR_ENGINE=easyocr
 LLM_BACKEND=local
 LOCAL_LLM_MODEL=Qwen/Qwen2.5-0.5B-Instruct
 
-# Embeddings lokalne (domyślne)
+# Local embeddings (default)
 EMBEDDING_MODEL=sdadas/mmlw-retrieval-roberta-large
 
-# Embeddings zdalne — gdy ustawione, zastępuje lokalne
+# Remote embeddings — when set, overrides local
 # REMOTE_EMBED_BASE_URL=http://<host>:7666/v1
 # REMOTE_EMBED_DIM=768
 
@@ -346,22 +346,22 @@ MINIO_SECRET_KEY=minioadmin
 # Kafka
 KAFKA_BOOTSTRAP_SERVERS=["localhost:9094"]
 ```
-Pełna lista zmiennych z opisami w `.env.example`.
+Full list of variables with descriptions in `.env.example`.
 
-> W Dockerze adresy `localhost` są automatycznie nadpisywane przez zmienne środowiskowe w `backend/docker-compose.yml` (`postgres:5432`, `minio:9000`, `kafka:9092`).
+> In Docker, `localhost` addresses are automatically overridden by environment variables in `backend/docker-compose.yml` (`postgres:5432`, `minio:9000`, `kafka:9092`).
 
 ---
 
-### Wolumeny Docker
+### Docker volumes
 
-| Wolumen | Usługa | Zawartość |
+| Volume | Service | Contents |
 |---|---|---|
-| `pgdata` | PostgreSQL | Baza danych: chunki, wektory, auth, historia chatów |
-| `minio_data` | MinIO | Pliki oryginalne i Markdown |
-| `kafka_data` | Kafka | Offsets, logi topicowe |
-| `model_cache` | Backend | Modele HuggingFace (embedding + LLM) |
+| `pgdata` | PostgreSQL | Database: chunks, vectors, auth, chat history |
+| `minio_data` | MinIO | Original and Markdown files |
+| `kafka_data` | Kafka | Offsets, topic logs |
+| `model_cache` | Backend | HuggingFace models (embedding + LLM) |
 
-Dane przeżywają restarty kontenerów. Żeby usunąć wszystko razem z danymi:
+Data survives container restarts. To remove everything including data:
 ```powershell
 docker compose -f frontend\docker-compose.yml down
 docker compose -f backend\docker-compose.yml down -v
@@ -370,31 +370,31 @@ docker compose down -v
 
 ---
 
-## Backendy LLM
+## LLM backends
 
-Wybór backенdu przez zmienną `LLM_BACKEND` w `.env` (gdy `USE_LOCAL_LLM=false`):
+Backend selection via the `LLM_BACKEND` variable in `.env` (when `USE_LOCAL_LLM=false`):
 
-| Wartość | Backend | Opis |
+| Value | Backend | Description |
 |---------|---------|------|
-| `local` | Qwen2.5-1.5B-Instruct | lokalnie na GPU, przez HuggingFace Transformers |
-| `azure` | Azure OpenAI | produkcyjny, wybór deploymentu z UI |
-| `vllm` | vLLM OpenAI API | kompatybilny endpoint `/v1/chat/completions` |
+| `local` | Qwen2.5-1.5B-Instruct | locally on GPU, via HuggingFace Transformers |
+| `azure` | Azure OpenAI | production-grade, deployment selection from the UI |
+| `vllm` | vLLM OpenAI API | compatible endpoint `/v1/chat/completions` |
 
 ### Azure OpenAI
 
 ```env
 LLM_BACKEND=azure
 USE_LOCAL_LLM=false
-AZURE_ENDPOINT=https://<zasob>.cognitiveservices.azure.com/
-AZURE_API_KEY=<klucz>
+AZURE_ENDPOINT=https://<resource>.cognitiveservices.azure.com/
+AZURE_API_KEY=<key>
 AZURE_API_VERSION=2024-02-01
 AZURE_DEPLOYMENT=gpt-5.4
-AZURE_DEPLOYMENTS=["gpt-5.4","gpt-4o"]   # lista w dropdownie UI
+AZURE_DEPLOYMENTS=["gpt-5.4","gpt-4o"]   # list shown in the UI dropdown
 ```
 
-### Zdalny embedding (nomic-embed-text-v1.5 przez vLLM)
+### Remote embedding (nomic-embed-text-v1.5 via vLLM)
 
-Gdy `REMOTE_EMBED_BASE_URL` jest ustawiony, embedding odbywa się zdalnie zamiast lokalnie:
+When `REMOTE_EMBED_BASE_URL` is set, embedding happens remotely instead of locally:
 
 ```env
 REMOTE_EMBED_BASE_URL=http://<host>:7666/v1
@@ -403,43 +403,43 @@ REMOTE_EMBED_API_KEY=EMPTY
 REMOTE_EMBED_DIM=768
 ```
 
-Prefiksy dla nomic-embed: zapytanie → `search_query: `, fragment → `search_document: `.
+Prefixes for nomic-embed: query → `search_query: `, passage → `search_document: `.
 
 ---
 
 ## Observability
 
-Stack PLG (Prometheus + Loki + Grafana) uruchamia się automatycznie przez `.\start.ps1`.
+The PLG stack (Prometheus + Loki + Grafana) starts automatically via `.\start.ps1`.
 
 ```powershell
-# Tylko observability
+# Observability only
 docker compose -f observability\docker-compose.yml up -d
 ```
 
-| Serwis | URL |
+| Service | URL |
 |--------|-----|
 | Grafana | http://localhost:3001 (admin / admin) |
 | Prometheus | http://localhost:9090 |
 | Loki | http://localhost:3100 |
 
-### Dashboardy (auto-provisioned)
+### Dashboards (auto-provisioned)
 
 **RAG — Logs**
-- Wolumen logów per serwis (wykres)
-- Logi na żywo: API, Consumer
-- Strumień błędów ze wszystkich serwisów
+- Log volume per service (chart)
+- Live logs: API, Consumer
+- Error stream from all services
 
 **RAG — Container Metrics**
-- CPU i pamięć per kontener
-- Ruch sieciowy Rx/Tx
-- GPU: utilizacja (%), VRAM (użyte/wolne), temperatura, pobór mocy
+- CPU and memory per container
+- Network traffic Rx/Tx
+- GPU: utilization (%), VRAM (used/free), temperature, power draw
 
-### Metryki GPU (DCGM Exporter)
+### GPU metrics (DCGM Exporter)
 
-Wymagają NVIDIA Container Toolkit na hoście. Bez niego panele GPU pokazują "No data", reszta observability działa normalnie.
+Requires the NVIDIA Container Toolkit on the host. Without it, GPU panels show "No data"; the rest of observability works normally.
 
-Eksportowane metryki: `DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE`, `DCGM_FI_DEV_GPU_TEMP`, `DCGM_FI_DEV_POWER_USAGE`.
+Exported metrics: `DCGM_FI_DEV_GPU_UTIL`, `DCGM_FI_DEV_FB_USED`, `DCGM_FI_DEV_FB_FREE`, `DCGM_FI_DEV_GPU_TEMP`, `DCGM_FI_DEV_POWER_USAGE`.
 
-### Metryki Django
+### Django metrics
 
-Backend eksponuje `/metrics` (django-prometheus) — Prometheus scrape co 15 s. Dostępne: liczniki requestów HTTP, latencja, garbage collector Python, liczniki ORM.
+The backend exposes `/metrics` (django-prometheus) — scraped by Prometheus every 15 s. Available: HTTP request counters, latency, Python garbage collector, ORM counters.

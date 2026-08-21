@@ -1,17 +1,17 @@
 <#
 .SYNOPSIS
-    Uruchamia pelny stack RAG dla Dokumentow.
+    Starts the full RAG for Documents stack.
 .PARAMETER Build
-    Przebuduj obrazy Docker przed uruchomieniem.
+    Rebuild Docker images before starting.
 .PARAMETER Down
-    Zatrzymaj i usun wszystkie kontenery.
+    Stop and remove all containers.
 .PARAMETER CreateUser
-    Po starcie backendu uruchom kreator pierwszego konta uzytkownika.
+    After the backend starts, run the wizard to create the first user account.
 .EXAMPLE
-    .\start.ps1               # uruchom (bez przebudowy)
-    .\start.ps1 -Build        # uruchom z przebudowa obrazow
-    .\start.ps1 -CreateUser   # uruchom i utworz pierwsze konto
-    .\start.ps1 -Down         # zatrzymaj wszystko
+    .\start.ps1               # start (no rebuild)
+    .\start.ps1 -Build        # start with image rebuild
+    .\start.ps1 -CreateUser   # start and create the first account
+    .\start.ps1 -Down         # stop everything
 #>
 param(
     [switch]$Build,
@@ -37,28 +37,28 @@ function Write-Err  { param($msg) Write-Host "    [ERR] $msg" -ForegroundColor R
 function Write-Info { param($msg) Write-Host "          $msg" -ForegroundColor DarkGray }
 
 if ($Down) {
-    Write-Step "Zatrzymywanie wszystkich kontenerow..."
+    Write-Step "Stopping all containers..."
     docker compose -f $observability down
     docker compose -f $frontend      down
     docker compose -f $backend       down
     docker compose -f $infra         down
-    Write-OK "Wszystkie kontenery zatrzymane."
+    Write-OK "All containers stopped."
     exit 0
 }
 
-Write-Step "Sprawdzanie Dockera..."
+Write-Step "Checking Docker..."
 docker info 2>&1 | Out-Null
 if ($LASTEXITCODE -ne 0) {
-    Write-Err "Docker nie dziala. Uruchom Docker Desktop i sprobuj ponownie."
+    Write-Err "Docker is not running. Start Docker Desktop and try again."
     exit 1
 }
-Write-OK "Docker dziala."
+Write-OK "Docker is running."
 
-Write-Step "Uruchamianie infrastruktury (PostgreSQL, MinIO, Kafka)..."
+Write-Step "Starting infrastructure (PostgreSQL, MinIO, Kafka)..."
 docker compose -f $infra up -d
-if ($LASTEXITCODE -ne 0) { Write-Err "Blad startu infrastruktury."; exit 1 }
+if ($LASTEXITCODE -ne 0) { Write-Err "Failed to start infrastructure."; exit 1 }
 
-Write-Info "Czekam az serwisy beda healthy (maks. 120 s)..."
+Write-Info "Waiting for services to become healthy (max. 120 s)..."
 $timeout = 120; $elapsed = 0; $ready = $false
 do {
     Start-Sleep 5; $elapsed += 5
@@ -67,30 +67,30 @@ do {
     Write-Info "  $elapsed s / $timeout s"
 } until ($ready -or $elapsed -ge $timeout)
 
-if ($ready) { Write-OK "Infrastruktura gotowa." }
-else { Write-Warn "Timeout healthcheck - kontynuuje mimo to." }
+if ($ready) { Write-OK "Infrastructure ready." }
+else { Write-Warn "Healthcheck timeout - continuing anyway." }
 
-Write-Step "Uruchamianie observability (Grafana, Loki, Prometheus, cAdvisor, DCGM)..."
+Write-Step "Starting observability (Grafana, Loki, Prometheus, cAdvisor, DCGM)..."
 if ($Build) {
     docker compose -f $observability up -d --build
 } else {
     docker compose -f $observability up -d
 }
-if ($LASTEXITCODE -ne 0) { Write-Warn "Blad startu observability - kontynuuje." }
-else { Write-OK "Observability uruchomione." }
+if ($LASTEXITCODE -ne 0) { Write-Warn "Failed to start observability - continuing." }
+else { Write-OK "Observability started." }
 
-Write-Step "Uruchamianie backendu (API + Consumer)..."
+Write-Step "Starting backend (API + Consumer)..."
 if ($Build) {
     docker compose -f $backend up -d --build
 } else {
     docker compose -f $backend up -d
 }
-if ($LASTEXITCODE -ne 0) { Write-Err "Blad startu backendu."; exit 1 }
-Write-OK "Backend uruchomiony."
+if ($LASTEXITCODE -ne 0) { Write-Err "Failed to start backend."; exit 1 }
+Write-OK "Backend started."
 
 if ($CreateUser) {
-    Write-Step "Tworzenie konta uzytkownika..."
-    Write-Info "Czekam az API bedzie gotowe (maks. 60 s)..."
+    Write-Step "Creating user account..."
+    Write-Info "Waiting for the API to be ready (max. 60 s)..."
     $apiReady = $false
     for ($i = 0; $i -lt 12; $i++) {
         Start-Sleep 5
@@ -100,43 +100,43 @@ if ($CreateUser) {
         } catch {}
     }
     if ($apiReady) {
-        $username = Read-Host "  Login"
-        $password = Read-Host "  Haslo" -AsSecureString
+        $username = Read-Host "  Username"
+        $password = Read-Host "  Password" -AsSecureString
         $plainPwd = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($password))
         $script = "from django.contrib.auth.models import User; User.objects.filter(username='$username').exists() or User.objects.create_superuser('$username','','$plainPwd'); print('OK')"
         docker compose -f $backend exec api python manage.py shell -c $script
-        if ($LASTEXITCODE -eq 0) { Write-OK "Konto '$username' gotowe." }
-        else { Write-Warn "Nie udalo sie utworzyc konta. Uzyj: docker compose -f backend\docker-compose.yml exec api python manage.py createsuperuser" }
+        if ($LASTEXITCODE -eq 0) { Write-OK "Account '$username' ready." }
+        else { Write-Warn "Failed to create account. Use: docker compose -f backend\docker-compose.yml exec api python manage.py createsuperuser" }
     } else {
-        Write-Warn "API nie odpowiada - pomijam tworzenie konta."
+        Write-Warn "API is not responding - skipping account creation."
     }
 }
 
-Write-Step "Uruchamianie frontendu (Next.js)..."
+Write-Step "Starting frontend (Next.js)..."
 if ($Build) {
     docker compose -f $frontend up -d --build
 } else {
     docker compose -f $frontend up -d
 }
-if ($LASTEXITCODE -ne 0) { Write-Err "Blad startu frontendu."; exit 1 }
-Write-OK "Frontend uruchomiony."
+if ($LASTEXITCODE -ne 0) { Write-Err "Failed to start frontend."; exit 1 }
+Write-OK "Frontend started."
 
 $line = "=" * 58
 Write-Host ""
 Write-Host $line -ForegroundColor Cyan
-Write-Host "  RAG dla Dokumentow  --  Stack uruchomiony" -ForegroundColor Cyan
+Write-Host "  RAG for Documents  --  Stack started" -ForegroundColor Cyan
 Write-Host $line -ForegroundColor Cyan
 Write-Host "  Frontend     : " -NoNewline; Write-Host "http://localhost:3000" -ForegroundColor White
 Write-Host "  Backend API  : " -NoNewline; Write-Host "http://localhost:8000/api/" -ForegroundColor White
 Write-Host "  MinIO UI     : " -NoNewline; Write-Host "http://localhost:9001  (minioadmin / minioadmin)" -ForegroundColor White
-Write-Host "  PostgreSQL   : " -NoNewline; Write-Host "localhost:5432  baza: ragdocs / ragdocs" -ForegroundColor White
+Write-Host "  PostgreSQL   : " -NoNewline; Write-Host "localhost:5432  database: ragdocs / ragdocs" -ForegroundColor White
 Write-Host "  Grafana      : " -NoNewline; Write-Host "http://localhost:3001  (admin / admin)" -ForegroundColor White
 Write-Host "  Prometheus   : " -NoNewline; Write-Host "http://localhost:9090" -ForegroundColor White
 Write-Host $line -ForegroundColor Cyan
 Write-Host ""
-Write-Host "  Pierwsze uruchomienie? Utworz konto:" -ForegroundColor DarkGray
+Write-Host "  First run? Create an account:" -ForegroundColor DarkGray
 Write-Host "    docker compose -f backend\docker-compose.yml exec api python manage.py createsuperuser" -ForegroundColor DarkGray
 Write-Host ""
-Write-Host "  Logi backendu  : docker compose -f backend\docker-compose.yml logs -f" -ForegroundColor DarkGray
-Write-Host "  Zatrzymaj      : .\start.ps1 -Down" -ForegroundColor DarkGray
+Write-Host "  Backend logs   : docker compose -f backend\docker-compose.yml logs -f" -ForegroundColor DarkGray
+Write-Host "  Stop           : .\start.ps1 -Down" -ForegroundColor DarkGray
 Write-Host ""

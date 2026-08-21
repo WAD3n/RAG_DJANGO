@@ -1,8 +1,8 @@
 <!DOCTYPE html>
-<html lang="pl">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>RAG dla dokumentów — Architektura</title>
+<title>RAG for Documents — Architecture</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -186,14 +186,14 @@ h1 {
 </head>
 <body>
 
-<h1>RAG dla dokumentów</h1>
+<h1>RAG for Documents</h1>
 <p class="subtitle">Django REST API &nbsp;·&nbsp; Next.js 14 &nbsp;·&nbsp; pgvector &nbsp;·&nbsp; Kafka KRaft &nbsp;·&nbsp; Local LLM</p>
 
 <!-- ═══════════════════════════════════════════════════
      LAYER 1: FRONTEND
 ═══════════════════════════════════════════════════ -->
 <div class="layer lbg-blue">
-  <div class="layer-label lc-blue">Warstwa Prezentacji &nbsp;—&nbsp; Next.js 14 · TypeScript · App Router · styled-jsx</div>
+  <div class="layer-label lc-blue">Presentation Layer &nbsp;—&nbsp; Next.js 14 · TypeScript · App Router · styled-jsx</div>
   <div class="row">
 
     <div class="box blue">
@@ -241,7 +241,7 @@ h1 {
      LAYER 2: API + KAFKA
 ═══════════════════════════════════════════════════ -->
 <div class="layer lbg-dark">
-  <div class="layer-label lc-green">Warstwa API &nbsp;—&nbsp; Django REST Framework · Python 3.11 · port 8000</div>
+  <div class="layer-label lc-green">API Layer &nbsp;—&nbsp; Django REST Framework · Python 3.11 · port 8000</div>
   <div class="row">
 
     <!-- Endpoints -->
@@ -324,12 +324,12 @@ h1 {
      LAYER 3: PIPELINES
 ═══════════════════════════════════════════════════ -->
 <div class="layer lbg-purple">
-  <div class="layer-label lc-purple">Warstwa Przetwarzania &nbsp;—&nbsp; backend/core/ &nbsp;·&nbsp; Python pipeline modules</div>
+  <div class="layer-label lc-purple">Processing Layer &nbsp;—&nbsp; backend/core/ &nbsp;·&nbsp; Python pipeline modules</div>
 
   <!-- Ingestion pipeline -->
   <div style="margin-bottom:10px;">
     <div style="font-size:9px; font-weight:700; letter-spacing:2px; color:#f78166; text-transform:uppercase; margin-bottom:8px;">
-      Pipeline Ingestion (async · via Kafka)
+      Ingestion Pipeline (async · via Kafka)
     </div>
     <div class="row" style="align-items:center; gap:6px;">
 
@@ -372,7 +372,7 @@ h1 {
   <!-- RAG query pipeline -->
   <div>
     <div style="font-size:9px; font-weight:700; letter-spacing:2px; color:#39c5cf; text-transform:uppercase; margin-bottom:8px;">
-      Pipeline RAG Query (sync · per request)
+      RAG Query Pipeline (sync · per request)
     </div>
     <div class="row" style="align-items:center; gap:6px;">
 
@@ -419,17 +419,17 @@ h1 {
      LAYER 4: INFRASTRUCTURE
 ═══════════════════════════════════════════════════ -->
 <div class="layer lbg-infra">
-  <div class="layer-label lc-gray">Infrastruktura &nbsp;—&nbsp; Docker Compose · sieć ragdla · CUDA 12.4</div>
+  <div class="layer-label lc-gray">Infrastructure &nbsp;—&nbsp; Docker Compose · ragdla network · CUDA 12.4</div>
   <div class="row">
 
     <div class="box cyan" style="flex:1.2">
       <div class="box-title">PostgreSQL 16 + pgvector</div>
       <div class="box-sub">
         ragdocs:ragdocs@localhost:5432<br/>
-        Wektory 1024-dim (cosine)<br/>
-        Metadane dokumentów<br/>
+        1024-dim vectors (cosine)<br/>
+        Document metadata<br/>
         <code style="color:#39c5cf; font-size:9px;">CREATE EXTENSION vector</code><br/>
-        &rarr; przed <code style="color:#39c5cf; font-size:9px;">register_vector(conn)</code>
+        &rarr; before <code style="color:#39c5cf; font-size:9px;">register_vector(conn)</code>
       </div>
     </div>
 
@@ -437,8 +437,8 @@ h1 {
       <div class="box-title">MinIO (S3-compatible)</div>
       <div class="box-sub">
         localhost:9000<br/>
-        Surowe dokumenty PDF<br/>
-        Przetworzone teksty<br/>
+        Raw PDF documents<br/>
+        Processed texts<br/>
         Object lifecycle policies
       </div>
     </div>
@@ -447,23 +447,23 @@ h1 {
       <div class="box-title">Kafka (KRaft)</div>
       <div class="box-sub">
         localhost:9094<br/>
-        Bez Zookeepera<br/>
+        No Zookeeper<br/>
         Topic: document-jobs<br/>
         Async ingestion queue
       </div>
     </div>
 
     <div class="box green" style="flex:1.4">
-      <div class="box-title">Modele ML (lokalne · GPU)</div>
+      <div class="box-title">ML Models (local · GPU)</div>
       <div class="box-sub">
         <strong style="color:#3fb950;">Embeddings</strong><br/>
         sdadas/mmlw-retrieval-roberta-large<br/>
-        → 1024-dim · polski asymetryczny retrieval<br/>
+        → 1024-dim · Polish asymmetric retrieval<br/>
         <br/>
         <strong style="color:#3fb950;">LLM Generation</strong><br/>
         Qwen/Qwen2.5-1.5B-Instruct<br/>
         → DEVICE=auto · CUDA 12.4<br/>
-        → vLLM niedostępne na Windows
+        → vLLM unavailable on Windows
       </div>
     </div>
 

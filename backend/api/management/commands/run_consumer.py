@@ -131,8 +131,8 @@ class Command(BaseCommand):
                     from api.models import DocumentSummary
                     self.stdout.write("    Summarizing...")
                     summary_text = _asyncio.run(llm.complete(
-                        prompt=f"Stresc ponizszy dokument w 3-5 zdaniach:\n\n{markdown[:8000]}",
-                        system="Jestes asystentem streszczajacym dokumenty. Odpowiadaj po polsku.",
+                        prompt=f"Summarize the following document in 3-5 sentences:\n\n{markdown[:8000]}",
+                        system="You are a document summarization assistant. Respond in English.",
                     ))
                     md_name = out.name
                     DocumentSummary.objects.update_or_create(
